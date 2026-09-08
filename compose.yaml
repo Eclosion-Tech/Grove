@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: grove
+      POSTGRES_PASSWORD: grove
+      POSTGRES_DB: grove
+    ports:
+      - "127.0.0.1:5442:5432"
+    volumes:
+      - grove-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grove"]
+      interval: 2s
+      retries: 15
+volumes:
+  grove-postgres:

@@ -1,0 +1,23 @@
+{
+  "name": "@grove/editor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build",
+    "dev": "vite --host 127.0.0.1 --port 4311"
+  },
+  "dependencies": {
+    "@eclosion-tech/grove": "0.1.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "lucide-react": "1.41.0",
+    "@eclosion-tech/grove-email": "0.1.0",
+    "@puckeditor/core": "0.23.0"
+  },
+  "devDependencies": {
+    "vite": "8.2.2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19"
+  }
+}

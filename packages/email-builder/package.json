@@ -1,0 +1,31 @@
+{
+  "name": "@eclosion-tech/grove-email",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./editor": {
+      "types": "./dist/editor.d.ts",
+      "import": "./dist/editor.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "entities": "^4.5.0",
+    "sanitize-html": "2.17.0"
+  },
+  "devDependencies": {
+    "@types/sanitize-html": "2.16.0",
+    "@types/react": "^19"
+  },
+  "peerDependencies": {
+    "@puckeditor/core": "^0.23.0",
+    "react": "^19.0.0"
+  }
+}

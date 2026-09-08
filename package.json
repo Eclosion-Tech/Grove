@@ -1,0 +1,31 @@
+{
+  "name": "grove-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspace @eclosion-tech/grove-email && npm run build --workspace @eclosion-tech/grove && npm run build --workspace @grove/host && npm run build --workspace @grove/editor && npm run build --workspace @grove/example-site",
+    "typecheck": "tsc --noEmit && tsc -p apps/editor/tsconfig.json && tsc -p apps/example-site/tsconfig.json",
+    "pretest": "npm run build",
+    "test": "node scripts/test.mjs",
+    "dev": "tsx --env-file=.env apps/grove/src/index.ts",
+    "dev:local": "npm run build && node scripts/dev-local.mjs",
+    "dev:pba": "npm run build && node --env-file=.env.pba scripts/dev-local.mjs --pba",
+    "db:migrate": "tsx --env-file=.env scripts/migrate.ts",
+    "grove": "tsx scripts/cli.ts",
+    "check": "npm test && npm run typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.8",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3"
+  },
+  "packageManager": "pnpm@10.6.2+sha512.47870716bea1572b53df34ad8647b42962bc790ce2bf4562ba0f643237d7302a3d6a8ecef9e4bdfc01d23af1969aa90485d4cebb0b9638fa5ef1daef656f6c1b"
+}

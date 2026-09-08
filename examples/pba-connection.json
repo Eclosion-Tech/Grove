@@ -1,0 +1,10 @@
+{
+  "origin": "http://127.0.0.1:3000",
+  "projectId": "replaceprojectid",
+  "scope": { "tenantId": "local", "siteId": "fieldnotes", "environment": "development" },
+  "actorId": "local-developer",
+  "staffUserId": "replace-with-sanity-user-id",
+  "classes": [
+    { "id": "affinity-class", "label": "Affinity class", "sanityClassId": "replace-with-class-document-id" }
+  ]
+}

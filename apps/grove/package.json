@@ -1,0 +1,14 @@
+{
+  "name": "@grove/host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@eclosion-tech/grove": "0.1.0",
+    "@eclosion-tech/grove-email": "0.1.0",
+    "sharp": "^0.35.4"
+  }
+}
