@@ -23,6 +23,10 @@ Each resource has `source.query`, `source.get`, and a required `source.authorize
 
 Actions have a named permission, typed inputs, a description/confirmation, a business-state availability predicate and an execution handler. Resource read access, action permission and record authorization are all checked on direct API calls. Unknown fields and invalid values are rejected. Applications must recheck the expected version, record authorization and domain constraints atomically where their data lives; an earlier UI or Grove read is not a transaction lock.
 
+## Application-owned modules
+
+An application can own its Grove module and have a host load it: set `GROVE_ADMIN_MODULES` to a comma-separated list of absolute paths or package names, each exporting a default function `({ scope, env }) => AdminModule[]`. The host imports them once at startup; this is operator configuration, never request data, and relative paths are refused. A module needs Grove only for types: the runtime contract is plain objects, and an error whose `name` is `AdminActionRejected` counts as a known rollback even when the module was built against another copy of Grove. Worm's module (`grove-admin` in the Worm repository) is the first one; it reads through Worm's worker API and writes through version-checked Postgres functions that Worm's repository owns.
+
 ## Local practice modules
 
 `apps/grove/src/admin-demo.ts` implements two modules using application-owned tables in `grove_demo`, separate from all Grove content tables. The demo shares the development Postgres instance; it does not connect to live PBA/Studious services or move their data.
@@ -41,7 +45,7 @@ The first three visible columns form the generic table; all allowed columns are 
 | Curriculum reviewer | Assigned lessons, approve/request revision |
 | Read-only observer | Both modules, public fields, no actions |
 
-Role changes require an existing session, matching origin and CSRF token, rotate CSRF, and change the server-authenticated actor. This role selector exists only in explicitly machine-trusting local mode. Production identity and membership mapping remain unimplemented. Fine-grained module permissions do not yet extend the CMS's existing coarse content permissions.
+Role changes require an existing session, matching origin and CSRF token, rotate CSRF, and change the server-authenticated actor. This role selector exists only in explicitly machine-trusting local mode. On the deployed Syntropy host, members receive application-module permissions as explicit `admin:*` grants; see [identity](identity.md). Fine-grained module permissions do not yet extend the CMS's existing coarse content permissions.
 
 ## Action journal and outcomes
 

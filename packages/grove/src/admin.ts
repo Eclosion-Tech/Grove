@@ -8,7 +8,9 @@ import { canonical, contentValid, identifier, object, revision, scopeValid } fro
 import { scopeKeys, scopeSql } from './relationships.js';
 
 /** Throw only when the adapter knows no effects committed (for example, a rolled-back transaction). */
-export class AdminActionRejected extends Error {}
+export class AdminActionRejected extends Error { override readonly name = 'AdminActionRejected'; }
+/** Modules built outside this package may not share its class identity; the name is the contract. */
+export const isRejection = (error: unknown): boolean => error instanceof AdminActionRejected || (error instanceof Error && error.name === 'AdminActionRejected');
 
 export type AdminPermission = `admin:${string}`;
 export type AdminAction = AdminActionInfo & {
@@ -162,7 +164,7 @@ export class GroveAdmin {
     try {
       await action.execute(ctx, { record, expectedVersion: input.expectedVersion, values: input.values, operationId: createHash('sha256').update(JSON.stringify([...scopeKeys(ctx.scope), ctx.actor.id, input.requestId])).digest('hex') });
     } catch (error) {
-      const [uncertain] = await this.db.query(`UPDATE grove_admin_actions SET status=$6,completed_at=now() WHERE ${scopeSql} AND actor_id=$4 AND request_id=$5 RETURNING *`, [...scopeKeys(ctx.scope), ctx.actor.id, input.requestId, error instanceof AdminActionRejected ? 'rejected' : 'uncertain']);
+      const [uncertain] = await this.db.query(`UPDATE grove_admin_actions SET status=$6,completed_at=now() WHERE ${scopeSql} AND actor_id=$4 AND request_id=$5 RETURNING *`, [...scopeKeys(ctx.scope), ctx.actor.id, input.requestId, isRejection(error) ? 'rejected' : 'uncertain']);
       return execution(uncertain!);
     }
     const [complete] = await this.db.query(`UPDATE grove_admin_actions SET status='succeeded',completed_at=now() WHERE ${scopeSql} AND actor_id=$4 AND request_id=$5 RETURNING *`, [...scopeKeys(ctx.scope), ctx.actor.id, input.requestId]);

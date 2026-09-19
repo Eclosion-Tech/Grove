@@ -4,9 +4,10 @@ import { GroveError, requireCondition } from './errors.js';
 import { canonical, contentValid, identifier, projectContent, revision, schemaDiff, schemaValid, scopeValid, validateContent } from './validation.js';
 import { indexLinks, protectReferenced, usages } from './relationships.js';
 import { MediaLibrary } from './media.js';
+import { Members } from './members.js';
 import type { StorageAdapter } from './storage.js';
 
-export type Permission = `admin:${string}` | 'schema:read' | 'schema:write' | 'content:read' | 'content:edit' | 'content:publish' | 'delivery:read' | 'media:read' | 'media:write' | 'media:delete';
+export type Permission = `admin:${string}` | 'schema:read' | 'schema:write' | 'content:read' | 'content:edit' | 'content:publish' | 'delivery:read' | 'media:read' | 'media:write' | 'media:delete' | 'members:read' | 'members:write';
 export type Actor = { id: string };
 export type Context = { actor: Actor; scope: Scope };
 export type Authorize = (actor: Actor, scope: Scope, permission: Permission) => boolean | Promise<boolean>;
@@ -22,8 +23,10 @@ const document = (r: Row): Document => ({
 
 export class Grove {
   readonly media: MediaLibrary;
+  readonly members: Members;
   constructor(private readonly db: Database, private readonly authorize: Authorize, options: { storage?: StorageAdapter } = {}) {
     this.media = new MediaLibrary(db, options.storage, this.allowed.bind(this), this.mutate.bind(this));
+    this.members = new Members(db, this.allowed.bind(this));
   }
 
   private async allowed(ctx: Context, permission: Permission): Promise<void> {
