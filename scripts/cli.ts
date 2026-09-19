@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createClient } from '@eclosion-tech/grove/client';
-import type { Schema } from '@eclosion-tech/grove';
+import type { MemberRole, Schema } from '@eclosion-tech/grove';
 
 // JSON schemas are data; TypeScript schema modules are trusted code executed only in the client repo.
 const [command, ...args] = process.argv.slice(2);
@@ -37,8 +37,13 @@ media get|where-used <id>
 media update <id> <metadata.json> --expected <revision>
 media archive|restore <id> --expected <revision>
 delivery <id> [--locale <locale>]
+members list
+members invite <email> --role <owner|developer|publisher|editor|viewer> [--permissions <admin:module:capability,...>]
+members update <id> [--role <role>] [--permissions <admin:module:capability,...>]
+members remove <id>
 
 Use expected version 0 to create a schema or document. Restore always creates a draft.
+Members sign in through the host's identity provider; an invitation binds to their account on first verified sign-in.
 `;
 async function main() {
   if (!command || ['help', '--help', '-h'].includes(command)) { console.log(usage); return; }
@@ -84,6 +89,14 @@ async function main() {
     else if (action === 'update' && id && file) output = await client.updateMedia(id, { ...JSON.parse(await readFile(file, 'utf8')), expectedRevision: integer('expected') });
     else if (action === 'archive' && id) output = await client.archiveMedia(id, integer('expected'));
     else if (action === 'restore' && id) output = await client.restoreMedia(id, integer('expected'));
+    else throw new Error(usage);
+  } else if (command === 'members') {
+    const permissions = flag('permissions') === undefined ? undefined : flag('permissions')!.split(',').map(s => s.trim()).filter(Boolean);
+    const role = flag('role') as MemberRole | undefined;
+    if (action === 'list') output = await client.listMembers();
+    else if (action === 'invite' && id && role) output = await client.inviteMember({ email: id, role, permissions });
+    else if (action === 'update' && id && (role || permissions)) output = await client.updateMember(id, { role, permissions });
+    else if (action === 'remove' && id) output = await client.removeMember(id);
     else throw new Error(usage);
   } else if (command === 'delivery' && action) output = await client.deliver(action, flag('locale'));
   else throw new Error(usage);

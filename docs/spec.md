@@ -20,7 +20,7 @@ Only read operations were performed in Pear. No tasks have been marked complete 
 
 1. Client repositories own TypeScript schemas, real React components, versioned component manifests, data migrations and authenticated Puck `/edit` routes. Complete API/code paths accompany GUI operations. The shared CMS does not execute arbitrary client JavaScript.
 2. The reusable Grove package has separate server/client exports. It runs independently with Postgres, host-supplied identity/authorization, S3-compatible storage and job adapters. A thin, separately deployed Synapp hosts the CMS API and structured editor. Syntropy's dashboard module supplies setup/access/usage/navigation.
-3. One shared multi-tenant service/database initially. Every resource is scoped by tenant, site and environment. Auth0 dashboard membership and `auth-next` sessions are not assumed equivalent; production identity integration still needs design.
+3. One shared multi-tenant service/database initially. Every resource is scoped by tenant, site and environment. Production identity is decided in [Identity](identity.md): Syntropy Auth supplies who the person is and which organization they belong to; Grove-owned membership decides what they may do.
 4. Schemas are versioned data, pushed by CI/CLI/MCP with expected versions and diffs. AI schema changes must reconcile to the client repo. Adding ordinary fields needs no database migration or Grove deployment.
 5. Puck provides composition and its built-in rich-text fields. Pulp is deferred. The actual persisted Puck rich-text representation must be verified before defining its storage contract; the older blanket “Tiptap JSON” requirement is superseded.
 6. Editorial drafts and operational service state have distinct owners. Publishing or restoring CMS content must never restore historical stock, enrollment, payment, or integration state. Sites resolve live operational data through the owning service.
@@ -72,10 +72,14 @@ Base: `/v1/tenants/:tenantId/sites/:siteId/environments/:environment`.
 | GET | `/documents/:id/history` | `content:read` | Descending revisions (`before`, `limit`) |
 | POST | `/documents/:id/restore` | `content:edit` | Restore with `targetRevision`, `expectedRevision` |
 | GET | `/delivery/:id` | `delivery:read` | Published content only; optional `locale` |
+| GET | `/members` | `members:read` | Workspace members and pending invitations |
+| POST | `/members` | `members:write` | Invite by email with `role` and optional `admin:*` `permissions` |
+| PATCH | `/members/:id` | `members:write` | Change role or permissions; the last signed-in owner is protected |
+| DELETE | `/members/:id` | `members:write` | Remove a member or pending invitation |
 
 Authentication is required on all routes. Host code verifies credentials and supplies the actor; the service separately authorizes every operation in its scope. Draft data never appears in delivery responses. Errors are JSON with 400/401/403/404/409 codes; unexpected errors are redacted. Bodies are bounded to 1 MB, schema/content to 500,000 characters, and lists/history to 100 records per page. Responses currently use `Cache-Control: no-store` until a propagation contract exists.
 
-The local host uses a single scoped developer token, binds loopback, and refuses production mode. It is not a Syntropy session adapter or a public deployment. The current local host supports bearer credentials and HttpOnly cookie sessions with CSRF/origin checks. Production host identity remains future work.
+The local host uses a single scoped developer token, binds loopback, and refuses production mode. It is not a Syntropy session adapter or a public deployment. The current local host supports bearer credentials and HttpOnly cookie sessions with CSRF/origin checks. The deployable host adds Syntropy Auth sign-in, Grove-owned membership and persistent server sessions; see [Identity](identity.md).
 
 ## Next milestones and acceptance gates
 
@@ -84,7 +88,7 @@ The local host uses a single scoped developer token, binds loopback, and refuses
 3. **References and review:** typed references, where-used visibility, draft reference resolution, expiring review links, locale relationships/staleness, preview isolation and permissions.
 4. **Media:** S3-compatible storage adapter, upload/search, localized metadata, crop/focal points, alt text, usage and deletion protection. Revisit old provider assumptions before implementation.
 5. **Reliable publication:** transactional outbox, retrying signed webhooks, explicit website propagation state, scheduling early and grouped releases later. Publishing currently commits content only; no claim of downstream propagation is made.
-6. **Syntropy host:** resolve org/site membership authorization across dashboard Auth0 and Syntropy Auth, separate editing/publishing/schema/integration capabilities, bind storage/jobs, and build the thin setup/navigation module.
+6. **Syntropy host:** membership roles and the Syntropy Auth adapter are implemented ([Identity](identity.md)). Remaining: one verified sign-in against a registered live client, multi-organization deployments, per-site API tokens, a members screen in the editor, storage/job binding, and the thin setup/navigation module.
 7. **Migration gate:** field-type inventory and operational field ownership from the client repos, complete export/import, verified restore, integration parity and preview checks. Start with starter/Jenna before paid-client cutover; preserve Stripe/Printful/LearnWorlds ownership. No paid-client migration until recovery is proven.
 8. **Optional AI/MCP:** use the same authenticated lifecycle API, reviewable draft diffs, attribution, cancellation and spend controls; first actions translation, alt text, content checks and page composition.
 

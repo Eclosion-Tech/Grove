@@ -1,4 +1,4 @@
-import type { DeliveredDocument, Document, HistoryEntry, SaveInput, Schema, SchemaRecord, Scope, MediaAsset, MediaPatch, Usage, Content, AdminModuleInfo, AdminPage, AdminRecordView, AdminExecution, AdminActionRequest } from './schema.js';
+import type { DeliveredDocument, Document, HistoryEntry, SaveInput, Schema, SchemaRecord, Scope, MediaAsset, MediaPatch, Usage, Content, AdminModuleInfo, AdminPage, AdminRecordView, AdminExecution, AdminActionRequest, Member, MemberInput } from './schema.js';
 
 export class GroveClientError extends Error {
   constructor(public readonly status: number, public readonly code: string, message: string, public readonly details?: unknown) {
@@ -62,6 +62,10 @@ export function createClient(options: ClientOptions) {
       return request<HistoryEntry[]>(`${path(id)}/history?${query}`);
     },
     restore: (id: string, targetRevision: number, expectedRevision: number) => request<Document>(`${path(id)}/restore`, 'POST', { targetRevision, expectedRevision }),
+    listMembers: () => request<Member[]>('members'),
+    inviteMember: (input: MemberInput) => request<Member>('members', 'POST', input),
+    updateMember: (id: string, input: Partial<Pick<MemberInput, 'role' | 'permissions'>>) => request<Member>(`members/${encodeURIComponent(id)}`, 'PATCH', input),
+    removeMember: (id: string) => request<{ ok: true }>(`members/${encodeURIComponent(id)}`, 'DELETE'),
     deliver: (id: string, locale?: string) => request<DeliveredDocument>(`delivery/${encodeURIComponent(id)}${locale === undefined ? '' : `?locale=${encodeURIComponent(locale)}`}`),
   };
 }

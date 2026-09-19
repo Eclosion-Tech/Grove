@@ -17,6 +17,7 @@
     "dev": "tsx --env-file=.env apps/grove/src/index.ts",
     "dev:local": "npm run build && node scripts/dev-local.mjs",
     "dev:pba": "npm run build && node --env-file=.env.pba scripts/dev-local.mjs --pba",
+    "host:syntropy": "node apps/grove/dist/syntropy-host.js",
     "db:migrate": "tsx --env-file=.env scripts/migrate.ts",
     "grove": "tsx scripts/cli.ts",
     "check": "npm test && npm run typecheck"

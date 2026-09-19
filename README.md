@@ -4,7 +4,7 @@ Syntropy Grove is a developer-defined administration workspace with a code-first
 
 **Current milestone: CMS plus a working admin-module foundation.** Grove now has a schema-driven content workspace with autosave, localization, search/status filters, duplication, publishing, version history, restore, and conflict recovery. A separate example client site uses Puck with its own React components, HTML rich text, a versioned component manifest, draft preview and live rendering. Both use the same Postgres content lifecycle, API, and CLI.
 
-Expiring review links, scheduling, publication webhooks, and the Syntropy identity adapter remain upcoming work. This is not ready for client migration.
+Expiring review links, scheduling and publication webhooks remain upcoming work. The deployed host with Syntropy identity and Grove-owned membership is implemented and tested against a conforming stand-in provider, but not yet verified against a live Syntropy Auth client. This is not ready for client migration.
 
 ## Email workspace
 
@@ -59,6 +59,17 @@ npm run grove -- documents restore hello --revision 1 --expected 2
 
 Restore creates revision 3 as a draft. Published revision 2 remains live. Publish revision 3 explicitly when ready. On subsequent runs, fetch current revisions first; stale expected versions return `409 conflict`.
 
+## Deployed host
+
+`npm run host:syntropy` starts the deployable host. Members sign in with Syntropy Auth; Grove decides what each member may do from its own membership table, with owner, developer, publisher, editor and viewer roles plus explicit application-module grants. One deployment serves one Syntropy organization. A server-only operator token bootstraps the first owner and pushes schemas from CI:
+
+```sh
+export GROVE_TOKEN="$GROVE_OPERATOR_TOKEN"
+npm run grove -- members invite owner@client.example --role owner
+```
+
+See [production identity](docs/identity.md) for the decision, setup, roles, API and limits.
+
 ## Application administration
 
 Local mode now includes **Class roster** and **Lesson reviews** in the sidebar. Open a record to inspect it and run an available action. Use **Practice as** to switch between the workspace owner, an assigned class coordinator, curriculum reviewer, and read-only observer. Permissions filter both the UI and actual API responses, including private fields and individual records.
@@ -67,7 +78,7 @@ These modules use persistent local sample application data outside the CMS table
 
 The independent `GroveAdmin` service accepts trusted adapters over databases or application APIs. It provides declared queries/actions, server-side authorization, version checks and a persistent action journal. `createAdminHandler` works without a CMS instance or schema. A loopback integration test verifies an external HTTP resource without copying records into Grove. Custom record views are bundled by the editor host; the lesson module demonstrates a reading preview.
 
-See [admin platform contracts and plan](docs/admin-platform.md) for ownership boundaries, adapter responsibilities, action outcome/reconciliation limits, API/CLI usage and next integrations. Production identity, job orchestration, PBA staff confirmation and the Studious adapter remain outstanding.
+See [admin platform contracts and plan](docs/admin-platform.md) for ownership boundaries, adapter responsibilities, action outcome/reconciliation limits, API/CLI usage and next integrations. Job orchestration, PBA staff confirmation, binding the PBA connection to a Syntropy member, and the Studious adapter remain outstanding.
 
 ## Records and images
 
@@ -86,7 +97,7 @@ PBA's first application adapter supports live, read-only class rosters with a co
 | Path | Purpose |
 | --- | --- |
 | `packages/grove` | Reusable schema definitions, CMS/admin services, Postgres migrations, Fetch API handlers and client |
-| `apps/grove` | Thin, localhost-only development host; future Syntropy Synapp adapter boundary |
+| `apps/grove` | Thin hosts: localhost development host (`index.ts`) and the deployable Syntropy identity host (`syntropy-host.ts`) sharing one request pipeline |
 | `apps/editor` | React structured-content workspace, using Grove's browser-safe client/controller |
 | `apps/example-site` | Separate client-owned Puck configuration, manifest and live/preview site |
 | `apps/shared` | Shared record/image pickers used by both editors |

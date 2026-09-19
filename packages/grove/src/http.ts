@@ -1,7 +1,7 @@
 import type { GroveAdmin } from './admin.js';
 import type { AdminActionRequest } from './admin-schema.js';
 import type { Actor, Context, Grove } from './service.js';
-import type { Schema, SaveInput, MediaPatch } from './schema.js';
+import type { Schema, SaveInput, MediaPatch, MemberInput } from './schema.js';
 import { GroveError, requireCondition } from './errors.js';
 import { MAX_UPLOAD_BYTES } from './media.js';
 import { object } from './validation.js';
@@ -70,7 +70,7 @@ export function createHandler(grove: Grove | null, options: HandlerOptions): (re
         }
         throw new GroveError('not_found', 'Admin route not found');
       }
-      const match = /^\/v1\/tenants\/([^/]+)\/sites\/([^/]+)\/environments\/([^/]+)\/(schema|documents|delivery|media)(?:\/([^/]+))?(?:\/(history|publish|unpublish|restore|where-used|migrate|content|archive))?\/?$/.exec(url.pathname);
+      const match = /^\/v1\/tenants\/([^/]+)\/sites\/([^/]+)\/environments\/([^/]+)\/(schema|documents|delivery|media|members)(?:\/([^/]+))?(?:\/(history|publish|unpublish|restore|where-used|migrate|content|archive))?\/?$/.exec(url.pathname);
       if (!grove || !match) throw new GroveError('not_found', 'Route not found');
       let parts: string[];
       try { parts = match.slice(1).map(p => p === undefined ? '' : decodeURIComponent(p)); }
@@ -78,6 +78,12 @@ export function createHandler(grove: Grove | null, options: HandlerOptions): (re
       const [tenantId, siteId, environment, resource, id, action] = parts as [string, string, string, string, string, string];
       const ctx: Context = { actor, scope: { tenantId, siteId, environment } };
       const method = request.method;
+      if (resource === 'members' && !action) {
+        if (!id && method === 'GET') return json(await grove.members.list(ctx));
+        if (!id && method === 'POST') return json(await grove.members.invite(ctx, await body(request) as MemberInput), 201);
+        if (id && method === 'PATCH') return json(await grove.members.update(ctx, id, await body(request) as Partial<MemberInput>));
+        if (id && method === 'DELETE') { await grove.members.remove(ctx, id); return json({ ok: true }); }
+      }
       if (resource === 'schema' && !id && !action) {
         if (method === 'GET') return json(await grove.getSchema(ctx));
         if (method === 'PUT') {

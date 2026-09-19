@@ -13,21 +13,23 @@ import { adminViews } from './admin-views.js';
 import { AdminWorkspace } from './AdminWorkspace.js';
 import { MediaBrowser } from '../../shared/References.js';
 
-type Session = { scope: Scope; csrf: string; actor: string; role?: string; demoRoles?: boolean };
+type Session = { scope: Scope; csrf: string; actor: string; role?: string; demoRoles?: boolean; email?: string | null; name?: string | null; login?: string };
 const message = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong. Try again.';
 
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [local, setLocal] = useState(false);
+  const [loginUrl, setLoginUrl] = useState('');
   const [ready, setReady] = useState(false);
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => { void fetch('/auth/session').then(async r => {
-    const value = await r.json(); if (r.ok) setSession(value); else setLocal(value.localLogin === true);
+    const value = await r.json(); if (r.ok) setSession(value); else { setLocal(value.localLogin === true); setLoginUrl(typeof value.login === 'string' ? value.login : ''); }
   }).catch(e => setError(message(e))).finally(() => setReady(true)); }, []);
   async function login() {
+    if (loginUrl) { location.assign(loginUrl); return; }
     setBusy(true); setError('');
     try {
       const response = await fetch('/auth/login', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
@@ -37,10 +39,10 @@ function App() {
   }
   if (!session) return <div className="login"><div className="login-brand"><Leaf size={36}/><span>grove<span className="brand-dot">.</span></span></div><form onSubmit={e => { e.preventDefault(); void login(); }} className="login-card">
     <span className="eyebrow">YOUR CONTENT WORKSPACE</span><h1>Make yourself<br/>at home.</h1><p>A little room to write, shape, and publish.</p>
-    {!local && <label>Development access token<input type="password" autoComplete="current-password" value={token} onChange={e => setToken(e.target.value)} required/><small>Use GROVE_DEV_TOKEN from your local .env file.</small></label>}
+    {!local && !loginUrl && <label>Development access token<input type="password" autoComplete="current-password" value={token} onChange={e => setToken(e.target.value)} required/><small>Use GROVE_DEV_TOKEN from your local .env file.</small></label>}
     {error && <p className="error" role="alert">{error}</p>}
-    <button className="primary" disabled={!ready || busy}>{busy ? 'Opening…' : local ? 'Open local workspace' : 'Open workspace'}<ArrowUpRight size={18}/></button>
-    <small className="login-foot">Syntropy Grove · Local development</small>
+    <button className="primary" disabled={!ready || busy}>{busy ? 'Opening…' : loginUrl ? 'Sign in with Syntropy' : local ? 'Open local workspace' : 'Open workspace'}<ArrowUpRight size={18}/></button>
+    <small className="login-foot">{loginUrl ? 'Syntropy Grove' : 'Syntropy Grove · Local development'}</small>
   </form></div>;
   return <Workspace key={session.actor} session={session} changeRole={async role => {
     const response = await fetch(`/auth/demo-role?role=${encodeURIComponent(role)}`, { method: 'POST', headers: { 'X-Grove-CSRF': session.csrf } });

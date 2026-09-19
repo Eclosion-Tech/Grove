@@ -70,4 +70,14 @@ export type MediaAsset = {
 };
 export type MediaPatch = { expectedRevision: number; alt?: Record<string, string>; caption?: Record<string, string>; focalPoint?: { x: number; y: number } };
 
+export type MemberRole = 'owner' | 'developer' | 'publisher' | 'editor' | 'viewer';
+/** A workspace member. `subject` is the identity provider's stable id, bound on first verified sign-in; until then the invitation is keyed by email. */
+export type Member = {
+  id: string; email: string; subject: string | null; role: MemberRole;
+  /** Explicit application-module grants (admin:<module>:<capability>) beyond the role's CMS permissions. */
+  permissions: string[];
+  createdBy: string; createdAt: string; updatedAt: string; acceptedAt: string | null;
+};
+export type MemberInput = { email: string; role: MemberRole; permissions?: string[] };
+
 export type * from './admin-schema.js';
