@@ -7,6 +7,7 @@ import { exampleApi } from './example-api.js';
 import { compose, listen } from './serve.js';
 import { loadAdminModules } from './modules.js';
 import { OPERATOR_ACTOR, syntropyAccess } from './syntropy.js';
+import { syntropyBlobStorage } from './blob-storage.js';
 
 /** Deployed Grove host: Syntropy Auth identity, Grove-owned membership, one organization per deployment. See docs/identity.md. */
 const env = (name: string, minimum = 1): string => {
@@ -33,7 +34,9 @@ const auth = new SyntropyAuthClient({
 
 const db = createPostgresDatabase(env('DATABASE_URL'));
 await migrate(db);
-const storage = process.env.GROVE_S3_BUCKET ? s3Storage(process.env.GROVE_S3_BUCKET, { region: process.env.AWS_REGION ?? 'auto', endpoint: process.env.GROVE_S3_ENDPOINT, forcePathStyle: true }) : localStorage(process.env.GROVE_MEDIA_DIRECTORY ?? '.grove/media');
+const storage = process.env.SYNTROPY_BLOB_API_KEY
+  ? syntropyBlobStorage({ apiUrl: process.env.SYNTROPY_BLOB_API_URL ?? 'https://www.syntropy.chat/api/v1/blobs', apiKey: env('SYNTROPY_BLOB_API_KEY') })
+  : process.env.GROVE_S3_BUCKET ? s3Storage(process.env.GROVE_S3_BUCKET, { region: process.env.AWS_REGION ?? 'auto', endpoint: process.env.GROVE_S3_ENDPOINT, forcePathStyle: true }) : localStorage(process.env.GROVE_MEDIA_DIRECTORY ?? '.grove/media');
 const inScope = (requested: Scope) => requested.tenantId === scope.tenantId && requested.siteId === scope.siteId && requested.environment === scope.environment;
 const authorize: Authorize = async (actor, requested, permission) => inScope(requested) && (actor.id === OPERATOR_ACTOR ? true : grove.members.authorize(actor, requested, permission));
 const grove = new Grove(db, authorize, { storage });

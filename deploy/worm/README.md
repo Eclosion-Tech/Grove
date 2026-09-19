@@ -16,15 +16,20 @@ runtime runs as a non-root user, contains production dependencies, and checks
 the host's session endpoint without authenticating. Supply runtime secrets
 through Syntropy's encrypted service environment, never the build context.
 
-Use a dedicated Grove PostgreSQL database and a private S3 bucket. Synapp service
-containers do not expose persistent local media mounts; the default local media
-directory must not be used for this deployment. `GROVE_S3_BUCKET` is required,
-with credentials limited to that bucket. See `docs/identity.md` for the
-remaining runtime variables and acceptance procedure.
+Use a dedicated Grove PostgreSQL database and Syntropy project blob storage.
+Set `SYNTROPY_BLOB_API_URL=https://www.syntropy.chat/api/v1/blobs` and
+`SYNTROPY_BLOB_API_KEY` to a secret key for the owning project with only
+`blobs:read` and `blobs:write` scopes. Syntropy derives the organization/project
+prefix from that key and returns 60-second signed object URLs. Bucket credentials
+remain in Syntropy. The host limits images to 10 MB and never forwards the project
+credential to object storage.
+
+Synapp containers do not expose persistent local media mounts; the default local
+media directory must not be used for this deployment. See `docs/identity.md` for
+sign-in and the remaining runtime variables.
 
 The approved pilot origin is `https://admin.worm.so`; the initial owner is
-`kara@worm.so`. The selected Worm API and data environment must be verified
-before deploying or running any administrative action.
+`kara@worm.so`. The authorized data environment is production, using `https://api.worm.so`.
 
 ## Container smoke test
 

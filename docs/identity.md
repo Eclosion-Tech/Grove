@@ -88,3 +88,11 @@ npm run grove -- members remove <id>
 - Sign-in attempts are stored per `GET /auth/login`; expired attempts are purged on each new sign-in, but there is no rate limit.
 - The PBA registrations adapter binds to the local developer actor and is refused on this host until it maps to a member.
 - No browser QA has been performed on the sign-in screen.
+
+## Syntropy project media storage
+
+For hosted Grove instances, set `SYNTROPY_BLOB_API_KEY` to a Syntropy project secret
+with `blobs:read` and `blobs:write` scopes. `SYNTROPY_BLOB_API_URL` defaults to
+`https://www.syntropy.chat/api/v1/blobs`. This adapter takes precedence over local
+or direct S3 configuration, keeps bucket credentials in Syntropy, and uses
+short-lived signed transfers within the owning project. See `deploy/worm/README.md`.
