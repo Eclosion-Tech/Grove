@@ -12,6 +12,11 @@ RUN ./node_modules/.bin/tsc -p modules/worm/tsconfig.json
 RUN npm prune --omit=dev --ignore-scripts --no-audit --no-fund
 
 FROM node:22-bookworm-slim AS runtime
+ARG GROVE_REVISION
+ARG WORM_REVISION
+LABEL org.opencontainers.image.source="https://forge.syntropy.chat/Eclosion-Tech/Grove" \
+      org.opencontainers.image.revision=$GROVE_REVISION \
+      io.syntropy.worm.revision=$WORM_REVISION
 ENV NODE_ENV=production PORT=4310 GROVE_ADMIN_MODULES=/app/modules/worm/dist/index.js
 WORKDIR /app
 COPY --from=build /app/package.json ./package.json
