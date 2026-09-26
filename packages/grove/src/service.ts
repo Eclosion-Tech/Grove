@@ -7,7 +7,7 @@ import { MediaLibrary } from './media.js';
 import { Members } from './members.js';
 import type { StorageAdapter } from './storage.js';
 
-export type Permission = `admin:${string}` | 'schema:read' | 'schema:write' | 'content:read' | 'content:edit' | 'content:publish' | 'delivery:read' | 'media:read' | 'media:write' | 'media:delete' | 'members:read' | 'members:write';
+export type Permission = `admin:${string}` | 'schema:read' | 'schema:write' | 'content:read' | 'content:edit' | 'content:publish' | 'delivery:read' | 'media:read' | 'media:write' | 'media:delete' | 'members:read' | 'members:write' | 'connections:read' | 'connections:write';
 export type Actor = { id: string };
 export type Context = { actor: Actor; scope: Scope };
 export type Authorize = (actor: Actor, scope: Scope, permission: Permission) => boolean | Promise<boolean>;

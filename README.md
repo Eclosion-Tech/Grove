@@ -79,7 +79,7 @@ These modules use persistent local sample application data outside the CMS table
 
 The independent `GroveAdmin` service accepts trusted adapters over databases or application APIs. It provides declared queries/actions, server-side authorization, version checks and a persistent action journal. `createAdminHandler` works without a CMS instance or schema. A loopback integration test verifies an external HTTP resource without copying records into Grove. Custom record views are bundled by the editor host; the lesson module demonstrates a reading preview.
 
-See [admin platform contracts and plan](docs/admin-platform.md) for ownership boundaries, adapter responsibilities, action outcome/reconciliation limits, API/CLI usage and next integrations. Job orchestration, PBA staff confirmation, binding the PBA connection to a Syntropy member, and the Studious adapter remain outstanding.
+See [admin platform contracts and plan](docs/admin-platform.md) for ownership boundaries, adapter responsibilities, action outcome/reconciliation limits, API/CLI usage and next integrations. Deployed applications keep their module in their own process and connect it to a Grove workspace over the signed [remote module protocol](docs/remote-modules.md); a workspace config pushed from the client repository registers connections, role grants and the schema together. Job orchestration, PBA staff confirmation, binding the PBA connection to a Syntropy member, and the Studious adapter remain outstanding.
 
 ## Records and images
 

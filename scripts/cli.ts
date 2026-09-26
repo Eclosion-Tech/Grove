@@ -42,6 +42,12 @@ members invite <email> --role <owner|developer|publisher|editor|viewer> [--permi
 members update <id> [--role <role>] [--permissions <admin:module:capability,...>]
 members remove <id>
 members link <email>          One-time sign-in link for an invited member (password hosts only)
+connections list
+connections add <id> --endpoint <https://app.example/grove-admin/v1>
+connections remove <id>
+role-grants get
+role-grants set <grants.json>
+config push <grove.config.ts|config.json> [--expected <schema version>] [--dry-run] [--allow-breaking]
 
 Use expected version 0 to create a schema or document. Restore always creates a draft.
 Members sign in through the host's identity provider; an invitation binds to their account on first verified sign-in.
@@ -104,6 +110,18 @@ async function main() {
       if (!response.ok) throw new Error(typeof (output as any).error === 'string' ? (output as any).error : 'Could not create an invitation link');
     }
     else throw new Error(usage);
+  } else if (command === 'connections') {
+    if (action === 'list') output = await client.listConnections();
+    else if (action === 'add' && id && flag('endpoint')) output = await client.addConnection({ id, endpoint: flag('endpoint')! });
+    else if (action === 'remove' && id) output = await client.removeConnection(id);
+    else throw new Error(usage);
+  } else if (command === 'role-grants') {
+    if (action === 'get') output = await client.roleGrants();
+    else if (action === 'set' && id) output = await client.setRoleGrants(JSON.parse(await readFile(id, 'utf8')));
+    else throw new Error(usage);
+  } else if (command === 'config' && action === 'push' && id) {
+    const config = id.endsWith('.json') ? JSON.parse(await readFile(id, 'utf8')) : (await import(pathToFileURL(resolve(id)).href)).default;
+    output = await client.pushConfig(config, { expectedSchemaVersion: flag('expected') ? integer('expected') : undefined, dryRun: args.includes('--dry-run'), allowBreaking: args.includes('--allow-breaking') });
   } else if (command === 'delivery' && action) output = await client.deliver(action, flag('locale'));
   else throw new Error(usage);
   console.log(JSON.stringify(output, null, 2));

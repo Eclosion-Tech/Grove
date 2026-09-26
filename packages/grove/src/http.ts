@@ -1,7 +1,9 @@
 import type { GroveAdmin } from './admin.js';
 import type { AdminActionRequest } from './admin-schema.js';
 import type { Actor, Context, Grove } from './service.js';
-import type { Schema, SaveInput, MediaPatch, MemberInput } from './schema.js';
+import type { Schema, SaveInput, MediaPatch, MemberInput, ConnectionInput, RoleGrants } from './schema.js';
+import type { Connections } from './connections.js';
+import { applyWorkspaceConfig, type WorkspaceConfigRequest } from './workspace.js';
 import { GroveError, requireCondition } from './errors.js';
 import { MAX_UPLOAD_BYTES } from './media.js';
 import { object } from './validation.js';
@@ -10,6 +12,8 @@ export type HandlerOptions = {
   /** The host verifies sessions or credentials. Never trust actor IDs from request bodies. */
   authenticate: (request: Request) => Promise<Actor | null>;
   admin?: GroveAdmin;
+  /** Remote module connections, when the host supports them. */
+  connections?: Connections;
   onError?: (error: unknown) => void;
 };
 const json = (value: unknown, status = 200) => Response.json(value, {
@@ -70,7 +74,7 @@ export function createHandler(grove: Grove | null, options: HandlerOptions): (re
         }
         throw new GroveError('not_found', 'Admin route not found');
       }
-      const match = /^\/v1\/tenants\/([^/]+)\/sites\/([^/]+)\/environments\/([^/]+)\/(schema|documents|delivery|media|members)(?:\/([^/]+))?(?:\/(history|publish|unpublish|restore|where-used|migrate|content|archive))?\/?$/.exec(url.pathname);
+      const match = /^\/v1\/tenants\/([^/]+)\/sites\/([^/]+)\/environments\/([^/]+)\/(schema|documents|delivery|media|members|connections|config|role-grants)(?:\/([^/]+))?(?:\/(history|publish|unpublish|restore|where-used|migrate|content|archive))?\/?$/.exec(url.pathname);
       if (!grove || !match) throw new GroveError('not_found', 'Route not found');
       let parts: string[];
       try { parts = match.slice(1).map(p => p === undefined ? '' : decodeURIComponent(p)); }
@@ -78,6 +82,17 @@ export function createHandler(grove: Grove | null, options: HandlerOptions): (re
       const [tenantId, siteId, environment, resource, id, action] = parts as [string, string, string, string, string, string];
       const ctx: Context = { actor, scope: { tenantId, siteId, environment } };
       const method = request.method;
+      if (resource === 'config' && !id && !action && method === 'PUT') return json(await applyWorkspaceConfig(ctx, { grove, connections: options.connections }, await body(request) as WorkspaceConfigRequest));
+      if (resource === 'role-grants' && !id && !action) {
+        if (method === 'GET') return json(await grove.members.roleGrants(ctx));
+        if (method === 'PUT') return json((await grove.members.setRoleGrants(ctx, await body(request) as RoleGrants)).grants);
+      }
+      if (resource === 'connections' && !action) {
+        if (!options.connections) throw new GroveError('not_found', 'This host does not support remote module connections');
+        if (!id && method === 'GET') return json(await options.connections.list(ctx));
+        if (!id && method === 'POST') { const { changed, ...connection } = await options.connections.register(ctx, await body(request) as ConnectionInput); return json(connection, changed ? 201 : 200); }
+        if (id && method === 'DELETE') { await options.connections.remove(ctx, id); return json({ ok: true }); }
+      }
       if (resource === 'members' && !action) {
         if (!id && method === 'GET') return json(await grove.members.list(ctx));
         if (!id && method === 'POST') return json(await grove.members.invite(ctx, await body(request) as MemberInput), 201);

@@ -76,6 +76,12 @@ Base: `/v1/tenants/:tenantId/sites/:siteId/environments/:environment`.
 | POST | `/members` | `members:write` | Invite by email with `role` and optional `admin:*` `permissions` |
 | PATCH | `/members/:id` | `members:write` | Change role or permissions; the last signed-in owner is protected |
 | DELETE | `/members/:id` | `members:write` | Remove a member or pending invitation |
+| GET | `/connections` | `connections:read` | Registered remote admin modules |
+| POST | `/connections` | `connections:write` | Register or re-register a remote module by endpoint after a signed catalog handshake |
+| DELETE | `/connections/:id` | `connections:write` | Remove a connection |
+| GET | `/role-grants` | `members:read` | Module permissions held by every member of a role |
+| PUT | `/role-grants` | `members:write` | Replace the workspace's role grants |
+| PUT | `/config` | per part | Push a workspace config: schema, connections and role grants, with `dryRun` |
 
 Authentication is required on all routes. Host code verifies credentials and supplies the actor; the service separately authorizes every operation in its scope. Draft data never appears in delivery responses. Errors are JSON with 400/401/403/404/409 codes; unexpected errors are redacted. Bodies are bounded to 1 MB, schema/content to 500,000 characters, and lists/history to 100 records per page. Responses currently use `Cache-Control: no-store` until a propagation contract exists.
 
