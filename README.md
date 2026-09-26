@@ -4,7 +4,7 @@ Syntropy Grove is a developer-defined administration workspace with a code-first
 
 **Current milestone: CMS plus a working admin-module foundation.** Grove now has a schema-driven content workspace with autosave, localization, search/status filters, duplication, publishing, version history, restore, and conflict recovery. A separate example client site uses Puck with its own React components, HTML rich text, a versioned component manifest, draft preview and live rendering. Both use the same Postgres content lifecycle, API, and CLI.
 
-Expiring review links, scheduling and publication webhooks remain upcoming work. The deployed host with Syntropy identity and Grove-owned membership is implemented and tested against a conforming stand-in provider, but not yet verified against a live Syntropy Auth client. This is not ready for client migration.
+Expiring review links, scheduling and publication webhooks remain upcoming work. The deployable host with native sign-in, a generic OpenID Connect adapter and Grove-owned membership is implemented and tested; OpenID Connect has been exercised only against a conforming stand-in provider, not yet a live one. This is not ready for client migration.
 
 ## Email workspace
 
@@ -61,14 +61,15 @@ Restore creates revision 3 as a draft. Published revision 2 remains live. Publis
 
 ## Deployed host
 
-`npm run host:syntropy` starts the deployable host. Members sign in with Syntropy Auth; Grove decides what each member may do from its own membership table, with owner, developer, publisher, editor and viewer roles plus explicit application-module grants. One deployment serves one Syntropy organization. A server-only operator token bootstraps the first owner and pushes schemas from CI:
+`npm run host` starts the deployable host. Grove is a standalone application: by default members sign in with an email address and password, and a workspace owner hands each new member a one-time link to set theirs, so no email service is required. Set `GROVE_AUTH_MODE=oidc` to sign members in through any OpenID Connect provider instead; Syntropy Auth is a documented preset. In both modes Grove decides what each member may do from its own membership table, with owner, developer, publisher, editor and viewer roles plus explicit application-module grants. A server-only operator token bootstraps the first owner and pushes schemas from CI:
 
 ```sh
 export GROVE_TOKEN="$GROVE_OPERATOR_TOKEN"
 npm run grove -- members invite owner@client.example --role owner
+npm run grove -- members link owner@client.example   # password mode: prints the one-time sign-in link
 ```
 
-See [production identity](docs/identity.md) for the decision, setup, roles, API and limits.
+See [identity](docs/identity.md) for the decision, modes, roles, setup, API and limits.
 
 ## Application administration
 
@@ -97,7 +98,7 @@ PBA's first application adapter supports live, read-only class rosters with a co
 | Path | Purpose |
 | --- | --- |
 | `packages/grove` | Reusable schema definitions, CMS/admin services, Postgres migrations, Fetch API handlers and client |
-| `apps/grove` | Thin hosts: localhost development host (`index.ts`) and the deployable Syntropy identity host (`syntropy-host.ts`) sharing one request pipeline |
+| `apps/grove` | Thin hosts: the localhost development host (`index.ts`) and the deployable host (`host.ts`, native password or OpenID Connect sign-in) sharing one request pipeline |
 | `apps/editor` | React structured-content workspace, using Grove's browser-safe client/controller |
 | `apps/example-site` | Separate client-owned Puck configuration, manifest and live/preview site |
 | `apps/shared` | Shared record/image pickers used by both editors |

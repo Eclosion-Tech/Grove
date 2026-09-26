@@ -36,4 +36,4 @@ USER node
 EXPOSE 4310
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "const h=require('node:http');h.get({hostname:'127.0.0.1',port:process.env.PORT, path:'/auth/session',headers:{host:new URL(process.env.GROVE_PUBLIC_URL).host}},r=>{r.resume();process.exit(r.statusCode===401||r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"
-CMD ["node", "apps/grove/dist/syntropy-host.js"]
+CMD ["node", "apps/grove/dist/host.js"]

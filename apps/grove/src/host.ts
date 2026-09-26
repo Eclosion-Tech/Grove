@@ -1,22 +1,26 @@
-import { SyntropyAuthClient } from '@eclosion-tech/syntropy-auth';
-import { Grove, GroveAdmin, SessionStore, createHandler, createPostgresDatabase, localStorage, migrate, s3Storage, type Authorize } from '@eclosion-tech/grove/server';
+import { Accounts, Grove, GroveAdmin, SessionStore, createHandler, createPostgresDatabase, localStorage, migrate, s3Storage, type Authorize } from '@eclosion-tech/grove/server';
 import type { Scope } from '@eclosion-tech/grove';
 import { emailApi } from './email.js';
 import { staticResponse } from './browser.js';
 import { exampleApi } from './example-api.js';
-import { compose, listen } from './serve.js';
+import { compose, listen, type Access } from './serve.js';
 import { loadAdminModules } from './modules.js';
-import { OPERATOR_ACTOR, syntropyAccess } from './syntropy.js';
+import { OPERATOR_ACTOR } from './identity.js';
+import { OidcClient } from './oidc-client.js';
+import { oidcAccess } from './oidc.js';
+import { passwordAccess } from './password.js';
 import { syntropyBlobStorage } from './blob-storage.js';
 
-/** Deployed Grove host: Syntropy Auth identity, Grove-owned membership, one organization per deployment. See docs/identity.md. */
+/** Deployable Grove host. Native password sign-in by default; any OpenID Connect provider with GROVE_AUTH_MODE=oidc. See docs/identity.md. */
 const env = (name: string, minimum = 1): string => {
   const value = process.env[name];
   if (!value || value.length < minimum) throw new Error(`Set ${name}${minimum > 1 ? ` (at least ${minimum} characters)` : ''}. See docs/identity.md.`);
   return value;
 };
-if (process.env.GROVE_LOCAL_LOGIN === '1' || process.env.GROVE_DEV_TOKEN) throw new Error('The Syntropy host has no development token or practice roles. Remove GROVE_LOCAL_LOGIN and GROVE_DEV_TOKEN.');
-if (process.env.GROVE_PBA_CONFIG) throw new Error('The PBA connection binds to the local developer actor and is not available on the Syntropy host yet.');
+if (process.env.GROVE_LOCAL_LOGIN === '1' || process.env.GROVE_DEV_TOKEN) throw new Error('The deployable host has no development token or practice roles. Remove GROVE_LOCAL_LOGIN and GROVE_DEV_TOKEN.');
+if (process.env.GROVE_PBA_CONFIG) throw new Error('The PBA connection binds to the local developer actor and is not available on the deployable host yet.');
+const mode = process.env.GROVE_AUTH_MODE ?? 'password';
+if (mode !== 'password' && mode !== 'oidc') throw new Error('GROVE_AUTH_MODE must be password or oidc.');
 const publicUrl = new URL(env('GROVE_PUBLIC_URL'));
 if (publicUrl.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(publicUrl.hostname)) throw new Error('GROVE_PUBLIC_URL must be an https origin; http is accepted only on loopback for local trials.');
 if (publicUrl.pathname !== '/' || publicUrl.search || publicUrl.hash || publicUrl.username) throw new Error('GROVE_PUBLIC_URL must be a bare origin such as https://grove.example.org');
@@ -24,13 +28,6 @@ const scope: Scope = { tenantId: env('GROVE_TENANT'), siteId: env('GROVE_SITE'),
 const operatorToken = process.env.GROVE_OPERATOR_TOKEN;
 if (operatorToken !== undefined && operatorToken.length < 32) throw new Error('GROVE_OPERATOR_TOKEN must be at least 32 characters. See docs/identity.md.');
 if (process.env.GROVE_EMAIL_API_KEY) env('GROVE_EMAIL_SIGNING_SECRET', 32);
-const clientId = env('SYNTROPY_AUTH_CLIENT_ID');
-const auth = new SyntropyAuthClient({
-  baseUrl: env('SYNTROPY_AUTH_URL'), clientId, clientSecret: env('SYNTROPY_AUTH_CLIENT_SECRET'),
-  redirectUri: `${publicUrl.origin}/auth/callback`,
-  // Grove never acts on the user's behalf against Syntropy, so no refresh token is requested.
-  scopes: ['openid', 'email', 'profile', 'org'],
-});
 
 const db = createPostgresDatabase(env('DATABASE_URL'));
 await migrate(db);
@@ -41,17 +38,24 @@ const inScope = (requested: Scope) => requested.tenantId === scope.tenantId && r
 const authorize: Authorize = async (actor, requested, permission) => inScope(requested) && (actor.id === OPERATOR_ACTOR ? true : grove.members.authorize(actor, requested, permission));
 const grove = new Grove(db, authorize, { storage });
 const admin = new GroveAdmin(db, authorize, await loadAdminModules(scope));
-const access = syntropyAccess({ auth, clientId, sessions: new SessionStore(db), members: grove.members, scope, publicUrl: publicUrl.origin, operatorToken, onError: error => console.error(error) });
+const identity = { sessions: new SessionStore(db), members: grove.members, scope, publicUrl: publicUrl.origin, operatorToken, onError: (error: unknown) => console.error(error) };
+const access: Access = mode === 'oidc'
+  ? oidcAccess({ ...identity, tenantClaim: process.env.GROVE_OIDC_TENANT_CLAIM || undefined, client: new OidcClient({
+      issuer: env('GROVE_OIDC_ISSUER'), clientId: env('GROVE_OIDC_CLIENT_ID'), clientSecret: env('GROVE_OIDC_CLIENT_SECRET'),
+      redirectUri: `${publicUrl.origin}/auth/callback`,
+      scopes: (process.env.GROVE_OIDC_SCOPES ?? 'openid email profile').split(/\s+/).filter(Boolean),
+    }) })
+  : passwordAccess({ ...identity, accounts: new Accounts(db), authorize });
 const email = emailApi({ grove, scope, authorize, authenticate: access.authenticate, storage, settings: {
   baseUrl: process.env.GROVE_EMAIL_API_URL, apiKey: process.env.GROVE_EMAIL_API_KEY,
   from: process.env.GROVE_EMAIL_FROM, fromName: process.env.GROVE_EMAIL_BRAND ?? 'Your organization',
   replyTo: process.env.GROVE_EMAIL_REPLY_TO, publicUrl: publicUrl.origin,
-  signingSecret: process.env.GROVE_EMAIL_SIGNING_SECRET ?? operatorToken ?? env('SYNTROPY_AUTH_CLIENT_SECRET'),
+  signingSecret: process.env.GROVE_EMAIL_SIGNING_SECRET ?? operatorToken ?? env('DATABASE_URL'),
 } });
 const handler = createHandler(grove, { authenticate: access.authenticate, admin, onError: error => console.error(error) });
 listen({
   port: Number(process.env.PORT ?? 4310), bind: process.env.GROVE_BIND ?? '0.0.0.0', protocol: publicUrl.protocol === 'https:' ? 'https' : 'http',
   hosts: () => [publicUrl.host],
   route: compose({ access, email, clientSite: exampleApi(grove, scope, access.authenticate), handler, static: staticResponse }),
-  close: () => db.close(), label: `Grove for ${scope.tenantId}/${scope.siteId} (${publicUrl.origin})`,
+  close: () => db.close(), label: `Grove (${mode} sign-in) for ${scope.tenantId}/${scope.siteId} at ${publicUrl.origin}`,
 });

@@ -121,6 +121,14 @@ export class Members {
     const [row] = await this.db.query(`SELECT * FROM grove_members WHERE ${scopeSql} AND subject = $4`, [...scopeKeys(scope), subject]);
     return row ? member(row) : null;
   }
+  /** Host-only: the membership or pending invitation for an email address in this workspace. */
+  async byEmail(scope: Scope, email: unknown): Promise<Member | null> {
+    scopeValid(scope);
+    let value: string;
+    try { value = address(email); } catch { return null; }
+    const [row] = await this.db.query(`SELECT * FROM grove_members WHERE ${scopeSql} AND email = $4`, [...scopeKeys(scope), value]);
+    return row ? member(row) : null;
+  }
   /** Authorize callback for hosts: a member holds the permissions of their role plus explicit application grants. */
   async authorize(actor: Actor, scope: Scope, permission: Permission): Promise<boolean> {
     scopeValid(scope);

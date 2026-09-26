@@ -21,9 +21,12 @@ docker run -d --name "$prefix-app" --network "container:$prefix-api" \
  -e GROVE_PUBLIC_URL=https://admin.worm.so \
  -e GROVE_TENANT=00000000-0000-4000-8000-000000000001 \
  -e GROVE_SITE=worm -e GROVE_ENVIRONMENT=qa \
- -e SYNTROPY_AUTH_URL=https://auth.syntropy.chat \
- -e SYNTROPY_AUTH_CLIENT_ID=smoke-test-client \
- -e SYNTROPY_AUTH_CLIENT_SECRET=smoke-test-secret \
+ -e GROVE_AUTH_MODE=oidc \
+ -e GROVE_OIDC_ISSUER=https://auth.syntropy.chat \
+ -e GROVE_OIDC_CLIENT_ID=smoke-test-client \
+ -e GROVE_OIDC_CLIENT_SECRET=smoke-test-secret \
+ -e "GROVE_OIDC_SCOPES=openid email profile org" \
+ -e GROVE_OIDC_TENANT_CLAIM=org.id \
  -e GROVE_OPERATOR_TOKEN=smoke-test-operator-token-32-characters \
  -e WORM_API_URL=http://127.0.0.1:8080 \
  -e WORM_SERVICE_ROLE_KEY=smoke-test-only "$image" >/dev/null
@@ -48,5 +51,5 @@ assert.equal((await request(base+'/members',{headers})).status,200);
 console.log('PASS: editor, anonymous session, invalid Host rejection, unauthenticated API denial, operator invitation and member read.');
 console.log('This uses a disposable PostgreSQL database and stand-in Worm API; it does not verify live OIDC or Worm writes.');
 JS
-docker exec "$prefix-db" psql -U postgres -d grove -Atc 'SELECT count(*) FROM grove_migrations' | awk '{if ($0 != 4) exit 1; print "PASS: all four Grove database migrations applied."}'
+docker exec "$prefix-db" psql -U postgres -d grove -Atc 'SELECT count(*) FROM grove_migrations' | awk '{if ($0 != 5) exit 1; print "PASS: all five Grove database migrations applied."}'
 docker inspect --format 'Runtime user: {{.Config.User}}; image: {{.Image}}' "$prefix-app"
