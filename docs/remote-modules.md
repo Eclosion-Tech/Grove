@@ -64,7 +64,7 @@ Grove treats only a `rejected` outcome with `noEffectsCommitted: true` as a roll
 
 ## Implementing the application side
 
-`@eclosion-tech/grove/server` exports `createRemoteModuleHandler`, a Fetch handler that serves an ordinary in-process `AdminModule` over this protocol: it verifies signatures against the keys you resolve, applies your allowlist, turns the module's `authorizeRecord` and `available` predicates into per-record decisions, and drives the operation ledger. Mount it on any Fetch-compatible server. Supply an `OperationLedger` whose `record` runs in the same transaction as your mutation; the bundled `MemoryLedger` is for tests and local development only.
+`@eclosion-tech/grove/remote` (an entry with only the protocol pieces and no CMS runtime, also re-exported from `/server`) exports `createRemoteModuleHandler`, a Fetch handler that serves an ordinary in-process `AdminModule` over this protocol: it verifies signatures against the keys you resolve, applies your allowlist, turns the module's `authorizeRecord` and `available` predicates into per-record decisions, and drives the operation ledger. Mount it on any Fetch-compatible server. Supply an `OperationLedger` whose `record` runs in the same transaction as your mutation; the bundled `MemoryLedger` is for tests and local development only.
 
 An application's module, written as an ordinary `AdminModule`, mounts unchanged behind this handler in the application's own process.
 
