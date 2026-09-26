@@ -81,3 +81,5 @@ export type Member = {
 export type MemberInput = { email: string; role: MemberRole; permissions?: string[] };
 
 export type * from './admin-schema.js';
+export type * from './remote-schema.js';
+export { REMOTE_PROTOCOL_VERSION, REMOTE_VERSION_HEADER, REMOTE_SIGNATURE_HEADER } from './remote-schema.js';

@@ -34,7 +34,7 @@ export type AdminResource = Omit<AdminResourceInfo, 'columns' | 'actions'> & {
 };
 export type AdminModule = Omit<AdminModuleInfo, 'resources'> & { resources: AdminResource[] };
 
-function fieldsValid(fields: AdminInput[]) {
+export function fieldsValid(fields: AdminInput[]) {
   requireCondition(Array.isArray(fields) && fields.length <= 30, 'At most 30 input fields are supported');
   const names = new Set<string>();
   for (const field of fields) {

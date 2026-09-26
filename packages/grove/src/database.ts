@@ -32,7 +32,7 @@ export async function migrate(db: Database): Promise<void> {
   await db.transaction(async tx => {
     await tx.query("SELECT pg_advisory_xact_lock(718301, 1)");
     await tx.query('CREATE TABLE IF NOT EXISTS grove_migrations (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())');
-    for (const [index, filename] of ['001_initial.sql', '002_relationships_media.sql', '003_admin_actions.sql', '004_members_sessions.sql', '005_accounts.sql'].entries()) {
+    for (const [index, filename] of ['001_initial.sql', '002_relationships_media.sql', '003_admin_actions.sql', '004_members_sessions.sql', '005_accounts.sql', '006_instance_keys.sql'].entries()) {
       const version = index + 1;
       if ((await tx.query('SELECT version FROM grove_migrations WHERE version = $1', [version])).length) continue;
       const sql = await readFile(new URL(`../migrations/${filename}`, import.meta.url), 'utf8');
