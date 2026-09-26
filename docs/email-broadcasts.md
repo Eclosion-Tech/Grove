@@ -23,8 +23,8 @@ Grove's `email` document type owns drafts and revision history. Add
 API and CLI paths also work for email; the GUI is not required. Local Fieldnotes
 seed/upgrade adds this collection without changing existing content ownership.
 
-Syntropy comms owns audiences, subscription status, immutable campaign/recipient
-snapshots, queue dispatch, delivery, and results. No Syntropy credential reaches
+The delivery service owns audiences, subscription status, immutable campaign/recipient
+snapshots, queue dispatch, delivery, and results. No delivery credential reaches
 the browser. The host proxy accepts fixed email operations, not arbitrary target
 URLs. Website transactional email remains on its existing integration.
 
@@ -43,13 +43,13 @@ verified production host identity adapter.
 
 ## Connection
 
-The Syntropy companion branch provides `/api/v1/email-broadcasts/*` and the durable
-broadcast dispatcher. Deploy its web/worker changes and configure the worker sweep
-before connecting Grove. No Syntropy database migration is required.
+The delivery service must implement the `/api/v1/email-broadcasts/*` contract with a
+durable broadcast dispatcher; a hosted edition provides one. Deploy and configure it
+before connecting Grove.
 
 Server configuration:
 
-- `GROVE_EMAIL_API_URL`: HTTPS Syntropy origin.
+- `GROVE_EMAIL_API_URL`: HTTPS origin of the delivery service.
 - `GROVE_EMAIL_API_KEY`: project secret with `email:broadcasts:read`,
   `email:broadcasts:write`, `email:broadcasts:send`, and `email:send` for test emails.
 - `GROVE_EMAIL_FROM`: a verified sender email address.
@@ -87,7 +87,7 @@ Imports use resumable batches of up to 1,000 rows, maximum 10,000 rows in the UI
 
 Broadcasts support up to 10,000 recipients and scheduling within 90 days. The
 review shows sender, subject, audience, active count, local send time, and revision.
-Syntropy rechecks the audience count at submission and subscription state at actual
+The delivery service rechecks the audience count at submission and subscription state at actual
 delivery. The transaction freezes membership/content before provider work begins.
 Later document edits/restores never resend or rewrite a submitted campaign.
 
@@ -100,10 +100,9 @@ the first 100 documents. Open/click values can include privacy proxies and scann
 `npm run check` runs builds, types, and real PostgreSQL integration tests. Email tests
 cover sanitizer/renderer behavior, CSV parsing, saved-revision review, forged and
 unauthorized submissions, retry identity, and durable signed images. Network sends
-are mocked. Syntropy has separate real-DB/RLS outbox and queue-failure tests.
+are mocked. The delivery service has its own real-DB/RLS outbox and queue-failure tests.
 
-Before PBA migration, finish the production identity/authorization adapter, configure
-the real project and sender, verify public image hosting and secret backup, and run
+Before a client migration, configure the real project and sender, verify public image hosting and secret backup, and run
 actual inbox checks with authorized test recipients. Reconcile imported counts and
-suppression states before retiring Kit/Mailchimp. No client account, audience, or
+suppression states before retiring the previous provider. No client account, audience, or
 live campaign is changed by the implementation tests.

@@ -1,8 +1,8 @@
 # Developer-defined administration — accepted direction and first implementation
 
-Recorded 2026-09-06 following the Grove, PBA and Studious discussion. This extends the CMS baseline; no external Pear records or client applications have been changed.
+Recorded 2026-09-06. This extends the CMS baseline with a developer-defined administration foundation.
 
-The [PBA registration adapter](pba-connection.md) now implements the first read-only application connection: configured class resources, an explicit staff identity binding, fresh upstream reads and limited field projection. Confirmation actions remain unavailable pending an upstream concurrency and operation-outcome contract. The local practice modules below still use synthetic data.
+The first application connections were read-only adapters over an application's staff API; deployed applications now connect over the [remote module protocol](remote-modules.md). The local practice modules below use synthetic data.
 
 **Grove gives developers the power to build a workspace their clients can confidently operate.** Developers deliberately expose content, queries, and actions. Clients use a tailored interface and real component previews. Code, CLI, API, and future AI integrations use the same authorization and domain boundaries.
 
@@ -34,7 +34,7 @@ An application can own its Grove module and have a host load it: set `GROVE_ADMI
 - **Class roster:** participant/class/status details, restricted email/staff notes, and a confirm-seat action.
 - **Lesson reviews:** sample curriculum text, a custom reading preview, approve and request-revision actions.
 
-The first three visible columns form the generic table; all allowed columns are available in record details. `apps/editor/src/admin-views.tsx` registers an optional custom record view by `module/resource`. It receives only projected records. The current lesson view previews sample text; it is not a Studious renderer or LMS integration. Custom code is compiled with the editor, never downloaded from arbitrary module URLs.
+The first three visible columns form the generic table; all allowed columns are available in record details. `apps/editor/src/admin-views.tsx` registers an optional custom record view by `module/resource`. It receives only projected records. The current lesson view previews sample text; it is not a learning-system renderer or LMS integration. Custom code is compiled with the editor, never downloaded from arbitrary module URLs.
 
 `npm run dev:local` seeds these records idempotently and adds both applications to the sidebar. The **Practice as** selector demonstrates:
 
@@ -92,8 +92,6 @@ CLI uses existing `GROVE_URL`, scope and token environment variables. `--input q
 
 Integration coverage uses real PostgreSQL for journals and example application data. It verifies operation/field/record/scope enforcement, pagination, direct API attacks, stale state, duplicate/concurrent requests, durable replay after service recreation, revoked access, uncertain results, known rollback and session role changes. An independent loopback HTTP service test demonstrates external ownership, request versioning and provider idempotency-key propagation without copying data into CMS documents.
 
-Verification after the PBA adapter: all 48 tests, including the opt-in test against PBA's actual source and migrations, passed with all workspace builds and TypeScript checks. The earlier local-host HTTP check verified role switching, forbidden direct actions, private-field projection and preservation of all six CMS documents. No deployed PBA connection or browser interaction/visual QA has been performed.
+Verification: the full suite passes with all workspace builds and TypeScript checks. No browser interaction or visual QA has been performed.
 
-The PBA read adapter is implemented; connecting a selected environment still requires its exact endpoint, class configuration and verified staff credentials. Staff confirmation needs an upstream revision and durable operation-outcome contract first. Studious should then connect its curriculum/review workflow and real learning-component renderer. Neither client project is changed by this milestone. A domain integration must decide publishing/promotion semantics; approving a review in the local demo merely changes its sample status.
-
-Still to build: production identity, provider-specific reconciliation, asynchronous job handles/progress/cancellation, external-reference fields and pickers, richer input schemas, custom edit-view contracts, audit administration, and durable curriculum version/attempt relationships. Existing Studious curriculum storage should remain authoritative unless a separate migration is explicitly designed and verified. Student attempts, scoring and progression remain LMS-owned; previews must not write learner progress.
+Still to build: provider-specific reconciliation, asynchronous job handles/progress/cancellation, external-reference fields and pickers, richer input schemas, custom edit-view contracts, audit administration, and durable curriculum version/attempt relationships. An application's existing storage should remain authoritative unless a separate migration is explicitly designed and verified. Learner attempts, scoring and progression remain owned by the learning system; previews must not write learner progress.

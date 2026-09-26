@@ -13,9 +13,6 @@ const run = (cmd, args, env) => {
 };
 let ownsDatabase = false;
 try {
-  const pba = process.argv.includes('--pba');
-  if (pba && (!process.env.GROVE_PBA_CONFIG || !process.env.GROVE_PBA_STAFF_TOKEN || (process.env.GROVE_DEV_TOKEN?.length ?? 0) < 32)) throw new Error('PBA mode requires GROVE_PBA_CONFIG, GROVE_PBA_STAFF_TOKEN, and GROVE_DEV_TOKEN (at least 32 characters). See docs/pba-connection.md.');
-  if (!pba && process.env.GROVE_PBA_CONFIG) throw new Error('Use npm run dev:pba for a real PBA connection; demo login cannot access PBA.');
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await chmod(directory, 0o700);
   try { await access(join(data, 'PG_VERSION')); } catch {
@@ -27,7 +24,7 @@ try {
     run('pg_ctl', ['-D', data, '-l', join(directory, 'postgres.log'), '-o', `-h '' -k ${quotedDirectory}`, '-w', 'start']);
     ownsDatabase = true;
   }
-  const env = { ...process.env, NODE_ENV: 'development', DATABASE_URL: `postgres://grove@localhost/postgres?host=${encodeURIComponent(directory)}`, GROVE_DEV_TOKEN: pba ? process.env.GROVE_DEV_TOKEN : randomBytes(32).toString('hex'), GROVE_LOCAL_LOGIN: pba ? '0' : '1', GROVE_TENANT: 'local', GROVE_SITE: 'fieldnotes', GROVE_ENVIRONMENT: 'development', PORT: process.env.PORT ?? '4310' };
+  const env = { ...process.env, NODE_ENV: 'development', DATABASE_URL: `postgres://grove@localhost/postgres?host=${encodeURIComponent(directory)}`, GROVE_DEV_TOKEN: randomBytes(32).toString('hex'), GROVE_LOCAL_LOGIN: '1', GROVE_TENANT: 'local', GROVE_SITE: 'fieldnotes', GROVE_ENVIRONMENT: 'development', PORT: process.env.PORT ?? '4310' };
   run(process.execPath, ['--import', 'tsx', 'scripts/seed.ts'], env);
   const child = spawn(process.execPath, ['apps/grove/dist/index.js'], { env, stdio: 'inherit' });
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => child.kill(signal));

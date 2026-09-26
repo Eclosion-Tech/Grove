@@ -1,6 +1,6 @@
 # Grove positioning — direction, 2026-09-06
 
-This direction was refined and approved in the Grove discussion. It is not a claim of proven market demand. Pear records have not been changed. See [admin platform](admin-platform.md) for the accepted extension and implementation boundary.
+This direction was refined and approved in the Grove discussion. It is not a claim of proven market demand. See [admin platform](admin-platform.md) for the accepted extension and implementation boundary.
 
 **Grove gives developers the power to build a workspace their clients can confidently operate.**
 

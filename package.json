@@ -16,7 +16,6 @@
     "test": "node scripts/test.mjs",
     "dev": "tsx --env-file=.env apps/grove/src/index.ts",
     "dev:local": "npm run build && node scripts/dev-local.mjs",
-    "dev:pba": "npm run build && node --env-file=.env.pba scripts/dev-local.mjs --pba",
     "host": "node apps/grove/dist/host.js",
     "db:migrate": "tsx --env-file=.env scripts/migrate.ts",
     "grove": "tsx scripts/cli.ts",

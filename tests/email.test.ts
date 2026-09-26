@@ -8,18 +8,18 @@ import { emailApi } from '../apps/grove/src/email.js';
 import { parseCsv } from '../apps/editor/src/email-csv.js';
 const db = createPostgresDatabase(process.env.TEST_DATABASE_URL!);
 before(() => migrate(db)); after(() => db.close());
-const scope = () => ({ tenantId: randomUUID(), siteId: 'pba', environment: 'test' });
+const scope = () => ({ tenantId: randomUUID(), siteId: 'site', environment: 'test' });
 async function fixture() {
   const s = scope(); const authorize = (actor: { id: string }, requested: any, permission: string) => requested.tenantId === s.tenantId && (actor.id === 'owner' || actor.id === 'editor' && !permission.includes('send'));
   const blobs = new Map<string, Uint8Array>(); const storage = { async put(key: string, bytes: Uint8Array) { blobs.set(key, bytes); }, async get(key: string) { if (!blobs.has(key)) throw new Error('Missing image'); return blobs.get(key)!; }, async remove(key: string) { blobs.delete(key); } };
   const grove = new Grove(db, authorize, { storage }); const ctx: Context = { scope: s, actor: { id: 'owner' } };
   await grove.pushSchema(ctx, { locales: ['en'], defaultLocale: 'en', types: [emailDocumentType] }, 0);
-  const data = starter('newsletter', 'PBA'); data.subject = 'Summer classes'; data.layout.root.props.address = '123 Example Street'; data.layout.content[2]!.props.href = 'https://example.com/classes';
+  const data = starter('newsletter', 'Example Org'); data.subject = 'Summer classes'; data.layout.root.props.address = '123 Example Street'; data.layout.content[2]!.props.href = 'https://example.com/classes';
   const doc = await grove.saveDocument(ctx, 'newsletter', { type: 'email', expectedRevision: 0, expectedSchemaVersion: 1, data: JSON.parse(JSON.stringify(data)) });
   const calls: { path: string; body: any }[] = [];
   const route = emailApi({ grove, scope: s, authorize, authenticate: async request => { const id = request.headers.get('x-actor'); return id ? { id } : null; }, storage, settings: { baseUrl: 'https://syntropy.example', apiKey: 'secret', from: 'news@example.com', fromName: 'PBA', signingSecret: 's'.repeat(32), publicUrl: 'https://grove.example' }, request: async (url, options) => {
     const path = new URL(String(url)).pathname; const body = options?.body ? JSON.parse(String(options.body)) : undefined; calls.push({ path, body });
-    return Response.json(path.endsWith('/audiences') ? [{ id: 'a', name: 'PBA community', active: 12 }] : { id: body?.requestId ?? 'test', recipients: 12 });
+    return Response.json(path.endsWith('/audiences') ? [{ id: 'a', name: 'Community', active: 12 }] : { id: body?.requestId ?? 'test', recipients: 12 });
   } });
   const call = async (path: string, body?: unknown, actor = 'owner') => (await route(new Request(`https://grove.example/email/${path}`, { method: body === undefined ? 'GET' : 'POST', headers: actor ? { 'x-actor': actor } : {}, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })))!;
   return { grove, ctx, data, doc, route, calls, call, blobs };
@@ -43,7 +43,7 @@ test('saved revision review pins output; modified drafts and forged review token
   assert.equal(review.summary.recipients, 12); assert.equal(f.calls.filter(c => c.path.endsWith('/campaigns')).length, 0);
   assert.equal((await f.call('send', { review: review.review + 'bad' })).status, 403);
   const sent = await f.call('send', { review: review.review }); assert.equal(sent.status, 200);
-  const payload = f.calls.at(-1)!.body; assert.equal(payload.source.revision, 1); assert.equal(payload.expectedRecipients, 12); assert.ok(payload.html.includes('PBA'));
+  const payload = f.calls.at(-1)!.body; assert.equal(payload.source.revision, 1); assert.equal(payload.expectedRecipients, 12); assert.ok(payload.html.includes('Example Org'));
   await f.grove.saveDocument(f.ctx, f.doc.id, { type: 'email', expectedRevision: 1, expectedSchemaVersion: 1, data: { subject: 'Changed subject' } });
   assert.equal((await f.call('send', { review: review.review })).status, 409);
 });

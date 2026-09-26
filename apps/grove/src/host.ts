@@ -9,7 +9,6 @@ import { OPERATOR_ACTOR } from './identity.js';
 import { OidcClient } from './oidc-client.js';
 import { oidcAccess } from './oidc.js';
 import { passwordAccess } from './password.js';
-import { syntropyBlobStorage } from './blob-storage.js';
 
 /** Deployable Grove host. Native password sign-in by default; any OpenID Connect provider with GROVE_AUTH_MODE=oidc. See docs/identity.md. */
 const env = (name: string, minimum = 1): string => {
@@ -18,7 +17,6 @@ const env = (name: string, minimum = 1): string => {
   return value;
 };
 if (process.env.GROVE_LOCAL_LOGIN === '1' || process.env.GROVE_DEV_TOKEN) throw new Error('The deployable host has no development token or practice roles. Remove GROVE_LOCAL_LOGIN and GROVE_DEV_TOKEN.');
-if (process.env.GROVE_PBA_CONFIG) throw new Error('The PBA connection binds to the local developer actor and is not available on the deployable host yet.');
 const mode = process.env.GROVE_AUTH_MODE ?? 'password';
 if (mode !== 'password' && mode !== 'oidc') throw new Error('GROVE_AUTH_MODE must be password or oidc.');
 const publicUrl = new URL(env('GROVE_PUBLIC_URL'));
@@ -31,9 +29,7 @@ if (process.env.GROVE_EMAIL_API_KEY) env('GROVE_EMAIL_SIGNING_SECRET', 32);
 
 const db = createPostgresDatabase(env('DATABASE_URL'));
 await migrate(db);
-const storage = process.env.SYNTROPY_BLOB_API_KEY
-  ? syntropyBlobStorage({ apiUrl: process.env.SYNTROPY_BLOB_API_URL ?? 'https://www.syntropy.chat/api/v1/blobs', apiKey: env('SYNTROPY_BLOB_API_KEY') })
-  : process.env.GROVE_S3_BUCKET ? s3Storage(process.env.GROVE_S3_BUCKET, { region: process.env.AWS_REGION ?? 'auto', endpoint: process.env.GROVE_S3_ENDPOINT, forcePathStyle: true }) : localStorage(process.env.GROVE_MEDIA_DIRECTORY ?? '.grove/media');
+const storage = process.env.GROVE_S3_BUCKET ? s3Storage(process.env.GROVE_S3_BUCKET, { region: process.env.AWS_REGION ?? 'auto', endpoint: process.env.GROVE_S3_ENDPOINT, forcePathStyle: true }) : localStorage(process.env.GROVE_MEDIA_DIRECTORY ?? '.grove/media');
 const inScope = (requested: Scope) => requested.tenantId === scope.tenantId && requested.siteId === scope.siteId && requested.environment === scope.environment;
 const authorize: Authorize = async (actor, requested, permission) => inScope(requested) && (actor.id === OPERATOR_ACTOR ? true : grove.members.authorize(actor, requested, permission));
 const grove = new Grove(db, authorize, { storage });

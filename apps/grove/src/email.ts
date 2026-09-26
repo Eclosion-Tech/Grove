@@ -6,11 +6,11 @@ import type { Context } from '@eclosion-tech/grove/server';
 import { validateEmail, renderEmail, type EmailDocument, type Asset } from '@eclosion-tech/grove-email';
 
 export type EmailSettings = { baseUrl?: string; apiKey?: string; from?: string; fromName: string; replyTo?: string; publicUrl?: string; signingSecret: string };
-export function syntropyEmail(settings: EmailSettings, request: typeof fetch = fetch) {
+export function deliveryApi(settings: EmailSettings, request: typeof fetch = fetch) {
   return async (path: string, body?: unknown) => {
     if (!settings.baseUrl || !settings.apiKey) throw new GroveError('invalid_request', 'Email delivery is not connected yet. You can still save and preview drafts.');
     const base = new URL(settings.baseUrl);
-    if (base.protocol !== 'https:' || base.username || base.password) throw new Error('Syntropy email requires an HTTPS server URL');
+    if (base.protocol !== 'https:' || base.username || base.password) throw new Error('The email delivery API requires an HTTPS server URL');
     const response = await request(new URL(path, base), { method: body === undefined ? 'GET' : 'POST', headers: { Authorization: `Bearer ${settings.apiKey}`, 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), redirect: 'error', signal: AbortSignal.timeout(55_000) });
     const value = await response.json() as any;
     if (!response.ok) throw new GroveError(response.status === 409 ? 'conflict' : 'invalid_request', typeof value.error === 'string' ? value.error : value.error?.message ?? 'The email service could not complete this request.');
@@ -20,7 +20,7 @@ export function syntropyEmail(settings: EmailSettings, request: typeof fetch = f
 export function emailApi(options: { grove: Grove; scope: Scope; authorize: Authorize; authenticate: (request: Request) => Promise<Actor | null>; storage: StorageAdapter; settings: EmailSettings; request?: typeof fetch }) {
   const { grove, scope, settings, storage } = options;
   if (settings.signingSecret.length < 32) throw new Error('Email signing secret must have at least 32 characters');
-  const upstream = syntropyEmail(settings, options.request);
+  const upstream = deliveryApi(settings, options.request);
   const sign = (value: string) => createHmac('sha256', settings.signingSecret).update(JSON.stringify(scope)).update(value).digest('base64url');
   const equal = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
   const connected = !!(settings.baseUrl && settings.apiKey && settings.from);

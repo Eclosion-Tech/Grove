@@ -1,6 +1,6 @@
 # Editor and client-site milestone — 2026-09-06
 
-This implements the next local slice from the Pear decisions captured in `spec.md`.
+This implements the next local slice from the decisions captured in `spec.md`.
 
 ## What works
 
@@ -31,6 +31,6 @@ Automated checks cover compilation, schema/document SQL lifecycle, two concurren
 
 No connected browser was available for interaction or visual QA. This means Puck drag/drop, rich-text field interactions, responsive layouts and keyboard/focus behavior still need hands-on browser verification. Optional `grove_list_content` and `grove_open_document` WebMCP tools use the same authenticated client and navigation guard; registration is unverified because no supported context was available. Ordinary editing is independent of them.
 
-Still outstanding before a client-ready milestone: Syntropy auth, real client embedding, field groups/conditional fields/advanced validation, per-locale page relationships, expiring review links, scheduling, outbox/webhooks, general client migration tooling, export/import and verified backup restore. The UI currently loads documents in bounded pages and filters titles locally; pickers use bounded server-side title/ID search. The main collection view will need server-side filtering at larger volumes.
+Still outstanding before a client-ready milestone: a live-verified hosted identity, real client embedding, field groups/conditional fields/advanced validation, per-locale page relationships, expiring review links, scheduling, outbox/webhooks, general client migration tooling, export/import and verified backup restore. The UI currently loads documents in bounded pages and filters titles locally; pickers use bounded server-side title/ID search. The main collection view will need server-side filtering at larger volumes.
 
 References: [Puck field transforms](https://puckeditor.com/docs/extending-puck/field-transforms), [Puck rich-text field](https://puckeditor.com/docs/api-reference/fields/richtext), and the installed Puck 0.23.0 source cited above.

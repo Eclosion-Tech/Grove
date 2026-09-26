@@ -85,8 +85,8 @@ test('requests are signed with an instance key, verified by key id, and refused 
 });
 
 test('endpoints and catalogs are validated as untrusted input', async () => {
-  assert.equal(validateEndpoint('https://api.worm.so/grove-admin/v1/'), 'https://api.worm.so/grove-admin/v1');
-  for (const bad of ['http://api.worm.so/x', 'https://user:pw@api.worm.so/x', 'https://api.worm.so/x?y=1', 'https://10.0.0.5/x', 'https://192.168.1.2/x', 'https://172.16.0.1/x', 'https://169.254.169.254/latest', 'https://internal.local/x', 'ftp://x', 'nope']) assert.throws(() => validateEndpoint(bad), isError('invalid_request'), bad);
+  assert.equal(validateEndpoint('https://api.my-app.example/grove-admin/v1/'), 'https://api.my-app.example/grove-admin/v1');
+  for (const bad of ['http://api.my-app.example/x', 'https://user:pw@api.my-app.example/x', 'https://api.my-app.example/x?y=1', 'https://10.0.0.5/x', 'https://192.168.1.2/x', 'https://172.16.0.1/x', 'https://169.254.169.254/latest', 'https://internal.local/x', 'ftp://x', 'nope']) assert.throws(() => validateEndpoint(bad), isError('invalid_request'), bad);
   assert.throws(() => validateEndpoint('http://127.0.0.1:9/x'), isError('invalid_request'));
   assert.equal(validateEndpoint('http://127.0.0.1:9/x', true), 'http://127.0.0.1:9/x');
   const good = describe(application().module);

@@ -3,7 +3,6 @@ import { Grove, GroveAdmin, InstanceKeys, createHandler, createPostgresDatabase,
 import { demoAdminModules } from './admin-demo.js';
 import { browserAccess, staticResponse } from './browser.js';
 import { exampleApi } from './example-api.js';
-import { loadPbaModule } from './pba.js';
 import { connectionsFor, loadAdminModules, moduleProvider } from './modules.js';
 import { compose, listen } from './serve.js';
 
@@ -16,7 +15,6 @@ const scope = {
   siteId: process.env.GROVE_SITE ?? 'demo',
   environment: process.env.GROVE_ENVIRONMENT ?? 'development',
 };
-const pbaModules = await loadPbaModule(scope);
 const db = createPostgresDatabase(databaseUrl);
 const storage = process.env.GROVE_S3_BUCKET ? s3Storage(process.env.GROVE_S3_BUCKET, { region: process.env.AWS_REGION ?? 'auto', endpoint: process.env.GROVE_S3_ENDPOINT, forcePathStyle: true }) : localStorage(process.env.GROVE_MEDIA_DIRECTORY ?? '.grove/media');
 const authorize: import('@eclosion-tech/grove/server').Authorize = (actor, requested, permission) => {
@@ -35,7 +33,7 @@ const port = Number(process.env.PORT ?? 4310);
 const keys = new InstanceKeys(db);
 // Local development accepts http loopback endpoints so a module running on this machine can be connected.
 const connections = connectionsFor(db, { keys, hostId: `http://127.0.0.1:${port}`, authorize, allowLoopback: true, onError: error => console.error(error) });
-const admin = new GroveAdmin(db, authorize, moduleProvider({ modules: [...(process.env.GROVE_LOCAL_LOGIN === '1' ? demoAdminModules(db, scope) : []), ...pbaModules, ...await loadAdminModules(scope)], connections, onError: error => console.error(error) }));
+const admin = new GroveAdmin(db, authorize, moduleProvider({ modules: [...(process.env.GROVE_LOCAL_LOGIN === '1' ? demoAdminModules(db, scope) : []), ...await loadAdminModules(scope)], connections, onError: error => console.error(error) }));
 const access = browserAccess(token, scope, process.env.GROVE_LOCAL_LOGIN === '1');
 if (process.env.GROVE_LOCAL_LOGIN === '1' && process.env.GROVE_EMAIL_API_KEY) throw new Error('Use token login for connected email; demo roles cannot send real broadcasts.');
 const email = emailApi({ grove, scope, authorize, authenticate: access.authenticate, storage, settings: {

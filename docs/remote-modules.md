@@ -23,7 +23,7 @@ Endpoint rules Grove enforces before signing anything: https, a bare path, no cr
 All routes are `POST` beneath the connection's endpoint, with JSON bodies. Every body except the catalog request carries a `context`:
 
 ```json
-{ "hostId": "https://grove.example.org", "connectionId": "worm", "scope": { "tenantId": "…", "siteId": "…", "environment": "…" }, "actor": { "id": "<member subject>", "permissions": ["admin:worm:organizations:read"] } }
+{ "hostId": "https://grove.example.org", "connectionId": "my-app", "scope": { "tenantId": "…", "siteId": "…", "environment": "…" }, "actor": { "id": "<member subject>", "permissions": ["admin:worm:organizations:read"] } }
 ```
 
 `actor.permissions` are the module's permission names this member holds, computed by Grove from membership. The application may narrow further; it must never widen.
@@ -66,7 +66,7 @@ Grove treats only a `rejected` outcome with `noEffectsCommitted: true` as a roll
 
 `@eclosion-tech/grove/server` exports `createRemoteModuleHandler`, a Fetch handler that serves an ordinary in-process `AdminModule` over this protocol: it verifies signatures against the keys you resolve, applies your allowlist, turns the module's `authorizeRecord` and `available` predicates into per-record decisions, and drives the operation ledger. Mount it on any Fetch-compatible server. Supply an `OperationLedger` whose `record` runs in the same transaction as your mutation; the bundled `MemoryLedger` is for tests and local development only.
 
-Worm's module is the first consumer: the module built in `grove-admin` mounts unchanged behind this handler on Worm's worker.
+An application's module, written as an ordinary `AdminModule`, mounts unchanged behind this handler in the application's own process.
 
 ## Implementing the Grove side
 
@@ -77,9 +77,9 @@ Worm's module is the first consumer: the module built in `grove-admin` mounts un
 An owner (or the operator) registers a connection by id and endpoint. Grove performs the catalog handshake, validates the descriptor, pins the catalog revision and stores the row in `grove_connections`; nothing else is stored. Developers can list connections; only owners change them.
 
 ```sh
-npm run grove -- connections add worm --endpoint https://api.worm.so/grove-admin/v1
+npm run grove -- connections add my-app --endpoint https://api.my-app.example/grove-admin/v1
 npm run grove -- connections list
-npm run grove -- connections remove worm
+npm run grove -- connections remove my-app
 ```
 
 API, under the workspace base: `GET /connections`, `POST /connections {id, endpoint}` (201 when something changed), `DELETE /connections/:id`. A host loads every registered connection when the workspace's connection set changes, skips one whose catalog revision no longer matches, and reports the reason; re-registering reviews and pins the new revision.
@@ -93,7 +93,7 @@ A **workspace config** pushes schema, connections and role grants from the clien
 ```ts
 // grove.config.ts in the client repository
 import schema from './schema.js';
-export default { formatVersion: 1, schema, connections: [{ id: 'worm', endpoint: 'https://api.worm.so/grove-admin/v1' }], roleGrants: { editor: ['admin:worm:organizations:read'], publisher: ['admin:worm:organizations:read', 'admin:worm:organizations:manage'] } };
+export default { formatVersion: 1, schema, connections: [{ id: 'my-app', endpoint: 'https://api.my-app.example/grove-admin/v1' }], roleGrants: { editor: ['admin:my-app:orders:read'], publisher: ['admin:my-app:orders:read', 'admin:my-app:orders:manage'] } };
 ```
 
 ```sh

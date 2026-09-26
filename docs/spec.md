@@ -1,6 +1,6 @@
-# Syntropy Grove — implementation baseline
+# Grove — implementation baseline
 
-Recorded 2026-09-06. This is a local baseline drawn from Pear decisions plus explicitly identified implementation choices, not a claim that a complete product specification existed already.
+Recorded 2026-09-06. This is a baseline drawn from the accepted product decisions plus explicitly identified implementation choices, not a claim that a complete product specification existed already.
 
 **Implementation update:** the local structured-editor/Puck slice, typed relationships and image library are implemented. See [Relationships and media](relationships-media.md) for the latest contracts. See [Editor milestone](editor-milestone.md) for current behavior, verification and remaining work; the accepted architecture below remains the baseline.
 
@@ -8,19 +8,13 @@ The subsequent discussion approved a developer-defined administration foundation
 
 ## Source of truth
 
-- Pear **14982**, “Syntropy CMS — Puck confirmed, Pulp deferred (2026-09-06)”: latest accepted requirements, package/host separation, code-first clarification, priorities, and Grove naming. This overrides conflicting older notes.
-- Pear **14967**, “Syntropy CMS direction (decided 2026-09-02)”: schema-as-data registry, JSONB storage, multi-tenant service, client migrations and delivery direction.
-- Pear **14966**, “Page-builder library decision: Puck (replaced craft.js)”: Puck choice and client-site `/edit` ownership.
-- Pear **14871**, shared site-layer probe: working prior art at `../site-layer-probe`.
-- Pear Tasks **394–399**: schema/storage, Puck, delivery, media, and structured editor work. Latest note says no implementation was completed and the detailed spec remained pending.
-
-Only read operations were performed in Pear. No tasks have been marked complete there.
+The accepted decisions are: schema-as-data registry with JSONB storage and a multi-tenant service; Puck for page composition with client-site ownership of the edit route; a shared schema-driven site layer as prior art; and the package/host separation, code-first clarification and priorities below. This file is the surviving record of those decisions.
 
 ## Accepted product architecture
 
 1. Client repositories own TypeScript schemas, real React components, versioned component manifests, data migrations and authenticated Puck `/edit` routes. Complete API/code paths accompany GUI operations. The shared CMS does not execute arbitrary client JavaScript.
-2. The reusable Grove package has separate server/client exports. It runs independently with Postgres, host-supplied identity/authorization, S3-compatible storage and job adapters. A thin, separately deployed Synapp hosts the CMS API and structured editor. Syntropy's dashboard module supplies setup/access/usage/navigation.
-3. One shared multi-tenant service/database initially. Every resource is scoped by tenant, site and environment. Production identity is decided in [Identity](identity.md): Grove signs members in natively or through any OpenID Connect provider (Syntropy Auth is a preset), and Grove-owned membership decides what they may do.
+2. The reusable Grove package has separate server/client exports. It runs independently with Postgres, host-supplied identity/authorization, S3-compatible storage and job adapters. A thin, separately deployed host serves the CMS API and structured editor; a hosted edition may supply setup, access, usage and navigation around it.
+3. One shared multi-tenant service/database initially. Every resource is scoped by tenant, site and environment. Production identity is decided in [Identity](identity.md): Grove signs members in natively or through any OpenID Connect provider, and Grove-owned membership decides what they may do.
 4. Schemas are versioned data, pushed by CI/CLI/MCP with expected versions and diffs. AI schema changes must reconcile to the client repo. Adding ordinary fields needs no database migration or Grove deployment.
 5. Puck provides composition and its built-in rich-text fields. Pulp is deferred. The actual persisted Puck rich-text representation must be verified before defining its storage contract; the older blanket “Tiptap JSON” requirement is superseded.
 6. Editorial drafts and operational service state have distinct owners. Publishing or restoring CMS content must never restore historical stock, enrollment, payment, or integration state. Sites resolve live operational data through the owning service.
@@ -85,7 +79,7 @@ Base: `/v1/tenants/:tenantId/sites/:siteId/environments/:environment`.
 
 Authentication is required on all routes. Host code verifies credentials and supplies the actor; the service separately authorizes every operation in its scope. Draft data never appears in delivery responses. Errors are JSON with 400/401/403/404/409 codes; unexpected errors are redacted. Bodies are bounded to 1 MB, schema/content to 500,000 characters, and lists/history to 100 records per page. Responses currently use `Cache-Control: no-store` until a propagation contract exists.
 
-The local host uses a single scoped developer token, binds loopback, and refuses production mode. It is not a Syntropy session adapter or a public deployment. The current local host supports bearer credentials and HttpOnly cookie sessions with CSRF/origin checks. The deployable host adds native password or OpenID Connect sign-in, Grove-owned membership and persistent server sessions; see [Identity](identity.md).
+The local host uses a single scoped developer token, binds loopback, and refuses production mode. It is not a production identity adapter or a public deployment. The current local host supports bearer credentials and HttpOnly cookie sessions with CSRF/origin checks. The deployable host adds native password or OpenID Connect sign-in, Grove-owned membership and persistent server sessions; see [Identity](identity.md).
 
 ## Next milestones and acceptance gates
 
@@ -94,8 +88,8 @@ The local host uses a single scoped developer token, binds loopback, and refuses
 3. **References and review:** typed references, where-used visibility, draft reference resolution, expiring review links, locale relationships/staleness, preview isolation and permissions.
 4. **Media:** S3-compatible storage adapter, upload/search, localized metadata, crop/focal points, alt text, usage and deletion protection. Revisit old provider assumptions before implementation.
 5. **Reliable publication:** transactional outbox, retrying signed webhooks, explicit website propagation state, scheduling early and grouped releases later. Publishing currently commits content only; no claim of downstream propagation is made.
-6. **Deployable host:** membership roles, native sign-in and a generic OpenID Connect adapter are implemented; Syntropy Auth is a configuration preset ([Identity](identity.md)). Remaining: one verified sign-in against a live provider, multi-organization deployments, per-site API tokens, a members screen in the editor, storage/job binding, and the Syntropy setup/navigation module.
-7. **Migration gate:** field-type inventory and operational field ownership from the client repos, complete export/import, verified restore, integration parity and preview checks. Start with starter/Jenna before paid-client cutover; preserve Stripe/Printful/LearnWorlds ownership. No paid-client migration until recovery is proven.
+6. **Deployable host:** membership roles, native sign-in and a generic OpenID Connect adapter are implemented ([Identity](identity.md)). Remaining: one verified sign-in against a live provider, multi-organization deployments, per-site API tokens, a members screen in the editor, and storage/job binding.
+7. **Migration gate:** field-type inventory and operational field ownership from the client repos, complete export/import, verified restore, integration parity and preview checks. Start with the starter template and a non-paying site before any paid-client cutover; preserve each site's commerce and learning integrations where they live. No paid-client migration until recovery is proven.
 8. **Optional AI/MCP:** use the same authenticated lifecycle API, reviewable draft diffs, attribution, cancellation and spend controls; first actions translation, alt text, content checks and page composition.
 
 Deferred until demand: simultaneous multiplayer editing, elaborate approval chains, personalization/A-B testing, semantic search, visual schema builder and plugin marketplace.

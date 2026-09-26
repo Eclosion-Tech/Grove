@@ -1,6 +1,6 @@
 # Identity — sign-in and membership
 
-Recorded 2026-09-26, replacing the 2026-09-17 Syntropy-only design. Grove is a standalone application with its own sign-in, and any OpenID Connect provider can be plugged in, the way Pear ships native email/password by default and takes an OIDC provider by configuration. In both cases membership is Grove's.
+Recorded 2026-09-26, replacing the earlier single-provider design. Grove is a standalone application with its own sign-in, and any OpenID Connect provider can be plugged in, the way Pear ships native email/password by default and takes an OIDC provider by configuration. In both cases membership is Grove's.
 
 ## Two questions, two owners
 
@@ -34,17 +34,7 @@ Opening the link shows a set-password screen; accepting it sets the password, bi
 
 Register `https://<grove-host>/auth/callback` as the redirect URI. Grove requests no refresh token: it never acts on the member's behalf against the provider. If userinfo fails, the id_token that arrived directly from the token endpoint is used after its issuer, audience and expiry are checked.
 
-**Syntropy Auth preset.** Register a confidential client in the Syntropy dashboard against the client organization's **org-level** user pool, then:
-
-```dotenv
-GROVE_AUTH_MODE=oidc
-GROVE_OIDC_ISSUER=https://auth.syntropy.chat
-GROVE_OIDC_SCOPES=openid email profile org
-GROVE_OIDC_TENANT_CLAIM=org.id
-GROVE_TENANT=<the Syntropy organization id>
-```
-
-Syntropy's `org` claim carries the pool owner's id, so accounts from another organization, or from a project-level pool, are refused. Syntropy supplies no role; membership below applies unchanged. Anything Syntropy-specific beyond configuration, such as organization membership sync or the dashboard module, belongs in a Syntropy edition outside this repository, as pear-cloud extends Pear.
+**Multi-tenant providers.** Where a provider puts the owning organization in a claim, set `GROVE_OIDC_TENANT_CLAIM` to that claim's dotted path (for example `org.id`) and `GROVE_TENANT` to the expected value; accounts from any other organization are refused. Providers supply no role; membership below applies unchanged. Anything specific to one provider beyond configuration belongs in a hosted edition outside this repository.
 
 ### Development host
 
@@ -130,12 +120,9 @@ CLI: `members list|invite|update|remove|link`.
 
 ## Limits and remaining work
 
-- No OIDC sign-in has been exercised against a live provider; one real sign-in, Syntropy Auth first, is the acceptance step before a client uses that mode.
+- No OIDC sign-in has been exercised against a live provider; one real sign-in is the acceptance step before a client uses that mode.
 - One workspace per deployment. No members screen in the editor; the CLI and API are the management surface. No per-site API tokens beyond the operator credential.
 - The sign-in lockout is per host process and per email address; there is no request-level rate limit.
 - Invitation links are handed over by the owner, not emailed. Adding email delivery would be an optional adapter, not a requirement.
 - No browser QA has been performed on the sign-in, invitation or change-password screens.
 
-## Syntropy project media storage
-
-For hosted Grove instances, set `SYNTROPY_BLOB_API_KEY` to a Syntropy project secret with `blobs:read` and `blobs:write` scopes. `SYNTROPY_BLOB_API_URL` defaults to `https://www.syntropy.chat/api/v1/blobs`. This storage adapter takes precedence over local or direct S3 configuration, keeps bucket credentials in Syntropy, and uses short-lived signed transfers within the owning project. It is a storage option selected by configuration, independent of the sign-in mode. See `deploy/worm/README.md`.
