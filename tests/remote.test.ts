@@ -199,3 +199,19 @@ test('a running outcome is polled and resolved; an unverifiable outcome is uncer
   assert.equal((await admin2.run(g.as('boss'), 'app', 'items', 'confirm', { requestId: 'poll-2', recordId: 'r1', expectedVersion: 1, values: {} })).status, 'uncertain');
   await assert.rejects(remoteModule({ connection: { id: 'app3', endpoint: 'https://app.example', hostId: 'grove-test' }, key, authorize: g.authorize, fetcher: async () => new Response('{}', { status: 200, headers: { 'grove-admin-version': '3.0' } }) }), RemoteProtocolError);
 });
+
+test('applications resolve Grove keys from the well-known document with caching and one refresh on rotation', async () => {
+  const { remoteKeyResolver } = await import('@eclosion-tech/grove/server');
+  const a = generateSigningKey(); const b = generateSigningKey();
+  let served = [a.publicJwk]; let fetches = 0;
+  const fetcher: typeof fetch = async () => { fetches += 1; return new Response(JSON.stringify({ keys: served }), { status: 200, headers: { 'content-type': 'application/json' } }); };
+  const resolve = remoteKeyResolver('https://grove.example/.well-known/grove-keys', { fetcher, ttlMs: 60_000 });
+  assert.equal((await resolve(a.kid))?.x, a.publicJwk.x); assert.equal((await resolve(a.kid))?.x, a.publicJwk.x); assert.equal(fetches, 1, 'cached');
+  assert.equal(await resolve(b.kid), undefined); assert.equal(fetches, 1, 'an unknown id right after a fetch does not refetch');
+  const later = remoteKeyResolver('https://grove.example/.well-known/grove-keys', { fetcher, ttlMs: 60_000 });
+  await later(a.kid); served = [b.publicJwk, a.publicJwk];
+  assert.equal(await later(b.kid), undefined, 'still within the refresh guard');
+  assert.throws(() => remoteKeyResolver('http://grove.example/.well-known/grove-keys'), /https/);
+  const failing = remoteKeyResolver('https://grove.example/.well-known/grove-keys', { fetcher: async () => new Response('nope', { status: 500 }) });
+  await assert.rejects(failing(a.kid), SignatureError);
+});

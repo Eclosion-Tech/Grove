@@ -82,3 +82,27 @@ export class InstanceKeys {
     return { keys: rows.map(r => r.public_jwk as PublicJwk) };
   }
 }
+
+/** Resolves Grove instance keys from a well-known URL with a short cache, refreshing once on an unknown key id (rotation). */
+export function remoteKeyResolver(wellKnownUrl: string, options: { fetcher?: typeof fetch; ttlMs?: number; timeoutMs?: number } = {}): (kid: string) => Promise<PublicJwk | undefined> {
+  const url = new URL(wellKnownUrl);
+  if (url.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) throw new Error('Grove key URLs must use https outside loopback');
+  let cache: { keys: PublicJwk[]; fetched: number } | null = null;
+  async function load(): Promise<PublicJwk[]> {
+    let response: Response;
+    try { response = await (options.fetcher ?? fetch)(url.toString(), { cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(options.timeoutMs ?? 5_000) }); }
+    catch { throw new SignatureError('Grove keys could not be fetched'); }
+    if (!response.ok) throw new SignatureError(`Grove keys could not be fetched (${response.status})`);
+    const body = await response.json().catch(() => null) as { keys?: unknown } | null;
+    const keys = Array.isArray(body?.keys) ? body!.keys.filter((k): k is PublicJwk => !!k && typeof k === 'object' && (k as PublicJwk).kty === 'OKP' && (k as PublicJwk).crv === 'Ed25519' && typeof (k as PublicJwk).kid === 'string' && typeof (k as PublicJwk).x === 'string').slice(0, 20) : [];
+    cache = { keys, fetched: Date.now() };
+    return keys;
+  }
+  return async kid => {
+    const fresh = cache && Date.now() - cache.fetched < (options.ttlMs ?? 5 * 60_000) ? cache.keys : await load();
+    const found = fresh.find(k => k.kid === kid);
+    if (found) return found;
+    if (cache && Date.now() - cache.fetched < 30_000) return undefined; // do not let unknown key ids hammer the well-known URL
+    return (await load()).find(k => k.kid === kid);
+  };
+}

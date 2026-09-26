@@ -1,11 +1,33 @@
 {
   "name": "@eclosion-tech/grove",
   "version": "0.1.0",
-  "private": true,
+  "description": "Code-first content workspace and developer-defined administration platform: schema registry, documents with history, media, membership, admin modules and the signed remote module protocol.",
+  "license": "AGPL-3.0-only",
+  "author": "Eclosion Tech",
+  "repository": {
+    "type": "git",
+    "url": "https://forge.syntropy.chat/Eclosion-Tech/Grove.git",
+    "directory": "packages/grove"
+  },
+  "keywords": [
+    "cms",
+    "admin",
+    "headless",
+    "postgres",
+    "oidc"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
   "files": [
     "dist",
-    "migrations"
+    "migrations",
+    "README.md",
+    "LICENSE"
   ],
   "exports": {
     ".": {
@@ -23,6 +45,10 @@
     "./editing": {
       "types": "./dist/editing.d.ts",
       "import": "./dist/editing.js"
+    },
+    "./remote": {
+      "types": "./dist/remote-entry.d.ts",
+      "import": "./dist/remote-entry.js"
     }
   },
   "scripts": {
