@@ -62,7 +62,7 @@ Syntropy's `org` claim carries the pool owner's id, so accounts from another org
 | developer | publisher plus write schema, read members |
 | owner | everything, including managing members and every `admin:*` permission |
 
-Extra `permissions` on a member are application-module grants only; CMS capabilities always come from the role. Owners manage members. A workspace must keep at least one signed-in owner: the last accepted owner cannot be removed or demoted, while a pending owner invitation can always be corrected.
+Extra `permissions` on a member are application-module grants only; CMS capabilities always come from the role. Owners can also set **role grants** for the workspace, module permissions every member with a given role holds, so a module does not have to be granted person by person; see [remote modules](remote-modules.md). Developers additionally read remote module connections (`connections:read`); only owners register them (`connections:write`). Owners manage members. A workspace must keep at least one signed-in owner: the last accepted owner cannot be removed or demoted, while a pending owner invitation can always be corrected.
 
 An invitation is keyed by email. On the first sign-in whose verified email matches, the invitation binds to that identity's subject and is matched by subject from then on, so a later email change does not lock the member out and another account with the same address cannot take the seat.
 

@@ -66,7 +66,7 @@ function validateRecord(value: unknown, actionIds: string[]): RemoteRecord {
 export const inputHash = (recordId: string, expectedVersion: number, values: Content) => createHash('sha256').update(canonical({ recordId, expectedVersion, values })).digest('hex');
 
 /** Builds an AdminModule whose sources and actions are served by an application over the signed remote protocol. */
-export async function remoteModule(options: RemoteModuleOptions): Promise<AdminModule> {
+export async function remoteModule(options: RemoteModuleOptions): Promise<AdminModule & { catalogRevision: string }> {
   const endpoint = validateEndpoint(options.connection.endpoint, options.allowLoopback);
   identifier(options.connection.id, 'Connection id'); requireCondition(typeof options.connection.hostId === 'string' && options.connection.hostId.length > 0 && options.connection.hostId.length <= 200, 'Host id is required');
   const fetcher = options.fetcher ?? fetch;
@@ -145,5 +145,6 @@ export async function remoteModule(options: RemoteModuleOptions): Promise<AdminM
     const error = object(body.error) && typeof body.error.code === 'string' && typeof body.error.message === 'string' ? { code: body.error.code.slice(0, 100), message: body.error.message.slice(0, 500) } : undefined;
     return { operationId, inputHash: hash, status: body.status as RemoteOutcome['status'], noEffectsCommitted: body.noEffectsCommitted === true, error };
   }
-  return { id: descriptor.id, label: descriptor.label, description: descriptor.description, resources: descriptor.resources.map(resourceFor) };
+  const built: AdminModule & { catalogRevision: string } = { id: descriptor.id, label: descriptor.label, description: descriptor.description, resources: descriptor.resources.map(resourceFor), catalogRevision: revisionId };
+  return built;
 }

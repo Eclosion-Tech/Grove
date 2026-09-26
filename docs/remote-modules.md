@@ -72,8 +72,40 @@ Worm's module is the first consumer: the module built in `grove-admin` mounts un
 
 `remoteModule({ connection, key, authorize })` loads the catalog, validates it, and returns an `AdminModule` that `GroveAdmin` treats like any other. Decisions arrive with records and are consulted by `authorizeRecord` and `available` without further requests. `InstanceKeys` stores the instance's signing keys in Postgres, generating one on first use and supporting rotation with a publication grace period.
 
+## Registering a connection
+
+An owner (or the operator) registers a connection by id and endpoint. Grove performs the catalog handshake, validates the descriptor, pins the catalog revision and stores the row in `grove_connections`; nothing else is stored. Developers can list connections; only owners change them.
+
+```sh
+npm run grove -- connections add worm --endpoint https://api.worm.so/grove-admin/v1
+npm run grove -- connections list
+npm run grove -- connections remove worm
+```
+
+API, under the workspace base: `GET /connections`, `POST /connections {id, endpoint}` (201 when something changed), `DELETE /connections/:id`. A host loads every registered connection when the workspace's connection set changes, skips one whose catalog revision no longer matches, and reports the reason; re-registering reviews and pins the new revision.
+
+## Role grants and workspace config
+
+Module permissions are `admin:<module>:…` names. Owners hold them all; everyone else needs a grant. Two kinds exist: per-member grants on the membership record, and **role grants**, which give every member with a role a set of module permissions for the workspace (`GET/PUT /role-grants`, `grove role-grants get|set`). Role grants never include CMS permissions; those always come from the role itself.
+
+A **workspace config** pushes schema, connections and role grants from the client repository in one reviewed step, with a dry run that reports the plan:
+
+```ts
+// grove.config.ts in the client repository
+import schema from './schema.js';
+export default { formatVersion: 1, schema, connections: [{ id: 'worm', endpoint: 'https://api.worm.so/grove-admin/v1' }], roleGrants: { editor: ['admin:worm:organizations:read'], publisher: ['admin:worm:organizations:read', 'admin:worm:organizations:manage'] } };
+```
+
+```sh
+npm run grove -- config push grove.config.ts --expected 3 --dry-run
+npm run grove -- config push grove.config.ts --expected 3
+```
+
+`PUT /config` applies it. Each part is authorized by its own service (schema: `schema:write`; connections: `connections:write`; role grants: `members:write`). Omitting a part leaves it untouched. Connections listed are registered or re-registered, never removed by omission. Role grants are replaced as a whole. Members are never part of the config: people change outside deploys.
+
 ## Limits in this version
 
 - Pending (`running`) outcomes are polled inside the request; there is no background reconciliation yet, so a long-running application operation ends as uncertain.
 - The endpoint check refuses private hosts by name and address literal; DNS rebinding is not defended against.
 - One catalog revision per connection; refreshing a changed catalog is a re-registration.
+- Connections are loaded per workspace on demand and cached until the connection set changes; there is no background health check.

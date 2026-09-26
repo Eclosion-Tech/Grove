@@ -79,6 +79,14 @@ export type Member = {
   createdBy: string; createdAt: string; updatedAt: string; acceptedAt: string | null;
 };
 export type MemberInput = { email: string; role: MemberRole; permissions?: string[] };
+/** A registered remote admin module: an endpoint and the catalog revision that was reviewed. Never a credential. */
+export type Connection = { id: string; endpoint: string; moduleId: string; label: string; catalogRevision: string; createdBy: string; createdAt: string; updatedAt: string };
+export type ConnectionInput = { id: string; endpoint: string };
+/** Application-module permissions every member with a role holds in this workspace, in addition to per-member grants. */
+export type RoleGrants = Partial<Record<Exclude<MemberRole, 'owner'>, string[]>>;
+/** Declarative workspace configuration, pushed from the client repository like a schema. */
+export type WorkspaceConfig = { formatVersion: 1; schema?: Schema; connections?: ConnectionInput[]; roleGrants?: RoleGrants };
+export type WorkspaceConfigResult = { applied: boolean; schema: { version: number; changes: { path: string; change: string; breaking: boolean }[]; applied: boolean } | null; connections: { id: string; status: 'registered' | 'unchanged' | 'failed'; reason?: string }[]; roleGrants: { changed: boolean } | null };
 
 export type * from './admin-schema.js';
 export type * from './remote-schema.js';

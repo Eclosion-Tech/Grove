@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Database, Queryable, Row } from './database.js';
-import type { Member, MemberInput, MemberRole, Scope } from './schema.js';
+import type { Member, MemberInput, MemberRole, RoleGrants, Scope } from './schema.js';
 import type { Actor, Context, Permission } from './service.js';
 import { GroveError, requireCondition } from './errors.js';
 import { identifier, scopeValid } from './validation.js';
@@ -15,12 +15,12 @@ export const rolePermissions: Record<MemberRole, readonly Permission[]> = {
   viewer: read,
   editor: edit,
   publisher: publish,
-  developer: [...publish, 'schema:write', 'members:read'],
+  developer: [...publish, 'schema:write', 'members:read', 'connections:read'],
   owner: [...publish, 'schema:write', 'members:read', 'members:write'],
 };
-export function permits(member: Pick<Member, 'role' | 'permissions'>, permission: Permission): boolean {
+export function permits(member: Pick<Member, 'role' | 'permissions'>, permission: Permission, roleGrants: string[] = []): boolean {
   if (member.role === 'owner') return true;
-  return rolePermissions[member.role].includes(permission) || (permission.startsWith('admin:') && member.permissions.includes(permission));
+  return rolePermissions[member.role].includes(permission) || (permission.startsWith('admin:') && (member.permissions.includes(permission) || roleGrants.includes(permission)));
 }
 
 type Guard = (ctx: Context, permission: Permission) => Promise<void>;
@@ -129,11 +129,36 @@ export class Members {
     const [row] = await this.db.query(`SELECT * FROM grove_members WHERE ${scopeSql} AND email = $4`, [...scopeKeys(scope), value]);
     return row ? member(row) : null;
   }
-  /** Authorize callback for hosts: a member holds the permissions of their role plus explicit application grants. */
+  /** Workspace-level application grants per role, set by owners so module permissions need not be granted person by person. */
+  async roleGrants(ctx: Context): Promise<RoleGrants> {
+    await this.guard(ctx, 'members:read');
+    const rows = await this.db.query(`SELECT role, permissions FROM grove_role_grants WHERE ${scopeSql}`, scopeKeys(ctx.scope));
+    return Object.fromEntries(rows.map(r => [r.role, r.permissions])) as RoleGrants;
+  }
+  /** Replaces the workspace's role grants as a whole. Returns whether anything changed. */
+  async setRoleGrants(ctx: Context, input: RoleGrants): Promise<{ grants: RoleGrants; changed: boolean }> {
+    await this.guard(ctx, 'members:write');
+    requireCondition(input && typeof input === 'object' && !Array.isArray(input), 'Provide role grants as an object');
+    const roles = ['developer', 'publisher', 'editor', 'viewer'] as const;
+    requireCondition(Object.keys(input).every(k => (roles as readonly string[]).includes(k)), 'Role grants may only name developer, publisher, editor or viewer');
+    const next = Object.fromEntries(roles.map(r => [r, grants(input[r] ?? [])])) as Record<typeof roles[number], string[]>;
+    return this.db.transaction(async tx => {
+      await lock(tx, ctx.scope);
+      const before = await tx.query(`SELECT role, permissions FROM grove_role_grants WHERE ${scopeSql}`, scopeKeys(ctx.scope));
+      const previous = Object.fromEntries(roles.map(r => [r, (before.find(b => b.role === r)?.permissions as string[] | undefined) ?? []]));
+      const changed = roles.some(r => JSON.stringify(previous[r]) !== JSON.stringify(next[r]));
+      for (const r of roles) {
+        if (next[r].length) await tx.query(`INSERT INTO grove_role_grants (tenant_id,site_id,environment,role,permissions,updated_by) VALUES ($1,$2,$3,$4,$5::jsonb,$6) ON CONFLICT (tenant_id,site_id,environment,role) DO UPDATE SET permissions = EXCLUDED.permissions, updated_by = EXCLUDED.updated_by, updated_at = now()`, [...scopeKeys(ctx.scope), r, next[r], ctx.actor.id]);
+        else await tx.query(`DELETE FROM grove_role_grants WHERE ${scopeSql} AND role = $4`, [...scopeKeys(ctx.scope), r]);
+      }
+      return { grants: Object.fromEntries(roles.filter(r => next[r].length).map(r => [r, next[r]])) as RoleGrants, changed };
+    });
+  }
+  /** Authorize callback for hosts: a member holds the permissions of their role, the workspace's grants for that role, and explicit personal grants. */
   async authorize(actor: Actor, scope: Scope, permission: Permission): Promise<boolean> {
     scopeValid(scope);
     if (!actor || typeof actor.id !== 'string' || !actor.id) return false;
-    const [row] = await this.db.query(`SELECT role, permissions FROM grove_members WHERE ${scopeSql} AND subject = $4`, [...scopeKeys(scope), actor.id]);
-    return !!row && permits({ role: row.role, permissions: row.permissions }, permission);
+    const [row] = await this.db.query(`SELECT m.role, m.permissions, coalesce(g.permissions, '[]'::jsonb) AS role_grants FROM grove_members m LEFT JOIN grove_role_grants g ON g.tenant_id = m.tenant_id AND g.site_id = m.site_id AND g.environment = m.environment AND g.role = m.role WHERE m.tenant_id = $1 AND m.site_id = $2 AND m.environment = $3 AND m.subject = $4`, [...scopeKeys(scope), actor.id]);
+    return !!row && permits({ role: row.role, permissions: row.permissions }, permission, row.role_grants);
   }
 }

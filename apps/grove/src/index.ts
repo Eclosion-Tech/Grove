@@ -1,10 +1,10 @@
 import { emailApi } from './email.js';
-import { Grove, GroveAdmin, createHandler, createPostgresDatabase, localStorage, s3Storage } from '@eclosion-tech/grove/server';
+import { Grove, GroveAdmin, InstanceKeys, createHandler, createPostgresDatabase, localStorage, s3Storage } from '@eclosion-tech/grove/server';
 import { demoAdminModules } from './admin-demo.js';
 import { browserAccess, staticResponse } from './browser.js';
 import { exampleApi } from './example-api.js';
 import { loadPbaModule } from './pba.js';
-import { loadAdminModules } from './modules.js';
+import { connectionsFor, loadAdminModules, moduleProvider } from './modules.js';
 import { compose, listen } from './serve.js';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -31,7 +31,11 @@ const authorize: import('@eclosion-tech/grove/server').Authorize = (actor, reque
   return grants[actor.id]?.includes(permission) ?? false;
 };
 const grove = new Grove(db, authorize, { storage });
-const admin = new GroveAdmin(db, authorize, [...(process.env.GROVE_LOCAL_LOGIN === '1' ? demoAdminModules(db, scope) : []), ...pbaModules, ...await loadAdminModules(scope)]);
+const port = Number(process.env.PORT ?? 4310);
+const keys = new InstanceKeys(db);
+// Local development accepts http loopback endpoints so a module running on this machine can be connected.
+const connections = connectionsFor(db, { keys, hostId: `http://127.0.0.1:${port}`, authorize, allowLoopback: true, onError: error => console.error(error) });
+const admin = new GroveAdmin(db, authorize, moduleProvider({ modules: [...(process.env.GROVE_LOCAL_LOGIN === '1' ? demoAdminModules(db, scope) : []), ...pbaModules, ...await loadAdminModules(scope)], connections, onError: error => console.error(error) }));
 const access = browserAccess(token, scope, process.env.GROVE_LOCAL_LOGIN === '1');
 if (process.env.GROVE_LOCAL_LOGIN === '1' && process.env.GROVE_EMAIL_API_KEY) throw new Error('Use token login for connected email; demo roles cannot send real broadcasts.');
 const email = emailApi({ grove, scope, authorize, authenticate: access.authenticate, storage, settings: {
@@ -41,10 +45,10 @@ const email = emailApi({ grove, scope, authorize, authenticate: access.authentic
   signingSecret: process.env.GROVE_EMAIL_SIGNING_SECRET ?? token,
 } });
 const clientSite = exampleApi(grove, scope, access.authenticate);
-const handler = createHandler(grove, { authenticate: access.authenticate, admin, onError: error => console.error(error) });
+const handler = createHandler(grove, { authenticate: access.authenticate, admin, connections, onError: error => console.error(error) });
 listen({
-  port: Number(process.env.PORT ?? 4310), bind: '127.0.0.1', protocol: 'http',
+  port, bind: '127.0.0.1', protocol: 'http',
   hosts: port => [`127.0.0.1:${port}`, `localhost:${port}`],
-  route: compose({ access, email, clientSite, handler, static: staticResponse }),
+  route: compose({ access, email, clientSite, handler, static: staticResponse, keys }),
   close: () => db.close(), label: 'Grove API',
 });

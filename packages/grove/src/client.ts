@@ -1,4 +1,4 @@
-import type { DeliveredDocument, Document, HistoryEntry, SaveInput, Schema, SchemaRecord, Scope, MediaAsset, MediaPatch, Usage, Content, AdminModuleInfo, AdminPage, AdminRecordView, AdminExecution, AdminActionRequest, Member, MemberInput } from './schema.js';
+import type { DeliveredDocument, Document, HistoryEntry, SaveInput, Schema, SchemaRecord, Scope, MediaAsset, MediaPatch, Usage, Content, AdminModuleInfo, AdminPage, AdminRecordView, AdminExecution, AdminActionRequest, Member, MemberInput, Connection, ConnectionInput, RoleGrants, WorkspaceConfig, WorkspaceConfigResult } from './schema.js';
 
 export class GroveClientError extends Error {
   constructor(public readonly status: number, public readonly code: string, message: string, public readonly details?: unknown) {
@@ -66,6 +66,12 @@ export function createClient(options: ClientOptions) {
     inviteMember: (input: MemberInput) => request<Member>('members', 'POST', input),
     updateMember: (id: string, input: Partial<Pick<MemberInput, 'role' | 'permissions'>>) => request<Member>(`members/${encodeURIComponent(id)}`, 'PATCH', input),
     removeMember: (id: string) => request<{ ok: true }>(`members/${encodeURIComponent(id)}`, 'DELETE'),
+    listConnections: () => request<Connection[]>('connections'),
+    addConnection: (input: ConnectionInput) => request<Connection>('connections', 'POST', input),
+    removeConnection: (id: string) => request<{ ok: true }>(`connections/${encodeURIComponent(id)}`, 'DELETE'),
+    roleGrants: () => request<RoleGrants>('role-grants'),
+    setRoleGrants: (grants: RoleGrants) => request<RoleGrants>('role-grants', 'PUT', grants),
+    pushConfig: (config: WorkspaceConfig, opts: { expectedSchemaVersion?: number; allowBreaking?: boolean; dryRun?: boolean } = {}) => request<WorkspaceConfigResult>('config', 'PUT', { ...config, ...opts }),
     deliver: (id: string, locale?: string) => request<DeliveredDocument>(`delivery/${encodeURIComponent(id)}${locale === undefined ? '' : `?locale=${encodeURIComponent(locale)}`}`),
   };
 }

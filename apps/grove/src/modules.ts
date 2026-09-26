@@ -30,3 +30,23 @@ export async function loadAdminModules(scope: Scope, env: NodeJS.ProcessEnv = pr
   }
   return modules;
 }
+
+import type { Database } from '@eclosion-tech/grove/server';
+import { Connections, GroveError, InstanceKeys, type Authorize, type Context, type Permission } from '@eclosion-tech/grove/server';
+
+/** Remote module connections for a host: registered per workspace, signed with the instance key, cached until the registry changes. */
+export function connectionsFor(db: Database, options: { keys: InstanceKeys; hostId: string; authorize: Authorize; allowLoopback?: boolean; onError?: (error: unknown) => void }): Connections {
+  const guard = async (ctx: Context, permission: Permission) => { if (!await options.authorize(ctx.actor, ctx.scope, permission)) throw new GroveError('forbidden', 'This operation is not available to your account.'); };
+  return new Connections(db, guard, options);
+}
+export function moduleProvider(options: { modules: AdminModule[]; connections: Connections; onError?: (error: unknown) => void }) {
+  let cache: { key: string; modules: AdminModule[] } | null = null;
+  return async (scope: Scope): Promise<AdminModule[]> => {
+    const key = `${scope.tenantId}/${scope.siteId}/${scope.environment}:${await options.connections.fingerprint(scope)}`;
+    if (cache?.key === key) return cache.modules;
+    const loaded = await options.connections.modules(scope);
+    for (const failure of loaded.failed) options.onError?.(new Error(`Connection ${failure.id}: ${failure.reason}`));
+    cache = { key, modules: [...options.modules, ...loaded.modules] };
+    return cache.modules;
+  };
+}

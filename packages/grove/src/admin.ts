@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { AdminActionInfo, AdminActionRequest, AdminColumn, AdminExecution, AdminInput, AdminModuleInfo, AdminPage, AdminRecord, AdminRecordView, AdminResourceInfo } from './admin-schema.js';
-import type { Content } from './schema.js';
+import type { Content, Scope } from './schema.js';
 import type { Authorize, Context, Permission } from './service.js';
 import type { Database, Row } from './database.js';
 import { GroveError, requireCondition } from './errors.js';
@@ -59,36 +59,48 @@ function validateInputs(fields: AdminInput[], input: Content) {
 const execution = (r: Row): AdminExecution => ({ id: r.request_id, module: r.module_id, resource: r.resource_id, action: r.action_id, recordId: r.record_id, status: r.status, message: r.status === 'succeeded' ? 'Action completed.' : r.status === 'rejected' ? 'Action was rejected without applying changes. Reload the record and review it.' : r.status === 'running' ? 'Action is running. Check its result before trying again.' : 'The outcome could not be confirmed. An administrator must reconcile it before another attempt.', createdAt: new Date(r.created_at).toISOString(), completedAt: r.completed_at ? new Date(r.completed_at).toISOString() : null });
 
 /** Independent of the CMS registry/document store. Only its action journal uses Grove's database. */
-export class GroveAdmin {
-  private modules: AdminModule[];
-  constructor(private db: Database, private authorize: Authorize, modules: AdminModule[]) {
-    const ids = new Set<string>();
-    for (const module of modules) {
-      identifier(module.id, 'Module'); requireCondition(!ids.has(module.id), 'Duplicate admin module'); ids.add(module.id);
-      const resources = new Set<string>();
-      for (const resource of module.resources) {
-        identifier(resource.id, 'Resource'); requireCondition(!resources.has(resource.id), 'Duplicate resource'); resources.add(resource.id);
-        requireCondition(resource.permission.startsWith(`admin:${module.id}:`), 'Resource permission must use its module namespace');
-        fieldsValid(resource.filters);
-        const columns = new Set<string>();
-        requireCondition(resource.columns.length > 0 && resource.columns.length <= 50, 'Provide 1–50 columns');
-        for (const col of resource.columns) { requireCondition(['text', 'number', 'boolean', 'status'].includes(col.type), 'Invalid column type'); identifier(col.name, 'Column'); requireCondition(!columns.has(col.name), 'Duplicate column'); columns.add(col.name); if (col.permission) requireCondition(col.permission.startsWith(`admin:${module.id}:`), 'Column permission must use its module namespace'); }
-        const actions = new Set<string>();
-        for (const action of resource.actions) {
-          identifier(action.id, 'Action'); requireCondition(!actions.has(action.id), 'Duplicate action'); actions.add(action.id);
-          requireCondition(action.permission.startsWith(`admin:${module.id}:`) && !!action.confirmation && !!action.description, 'Actions need a scoped permission, description and confirmation'); fieldsValid(action.inputs);
-        }
-        requireCondition(typeof resource.source.authorizeRecord === 'function', 'Provide record authorization');
+export type ModuleProvider = (scope: Scope) => AdminModule[] | Promise<AdminModule[]>;
+export function validateModules(modules: AdminModule[]): void {
+  const ids = new Set<string>();
+  for (const module of modules) {
+    identifier(module.id, 'Module'); requireCondition(!ids.has(module.id), 'Duplicate admin module'); ids.add(module.id);
+    const resources = new Set<string>();
+    for (const resource of module.resources) {
+      identifier(resource.id, 'Resource'); requireCondition(!resources.has(resource.id), 'Duplicate resource'); resources.add(resource.id);
+      requireCondition(resource.permission.startsWith(`admin:${module.id}:`), 'Resource permission must use its module namespace');
+      fieldsValid(resource.filters);
+      const columns = new Set<string>();
+      requireCondition(resource.columns.length > 0 && resource.columns.length <= 50, 'Provide 1–50 columns');
+      for (const col of resource.columns) { requireCondition(['text', 'number', 'boolean', 'status'].includes(col.type), 'Invalid column type'); identifier(col.name, 'Column'); requireCondition(!columns.has(col.name), 'Duplicate column'); columns.add(col.name); if (col.permission) requireCondition(col.permission.startsWith(`admin:${module.id}:`), 'Column permission must use its module namespace'); }
+      const actions = new Set<string>();
+      for (const action of resource.actions) {
+        identifier(action.id, 'Action'); requireCondition(!actions.has(action.id), 'Duplicate action'); actions.add(action.id);
+        requireCondition(action.permission.startsWith(`admin:${module.id}:`) && !!action.confirmation && !!action.description, 'Actions need a scoped permission, description and confirmation'); fieldsValid(action.inputs);
       }
+      requireCondition(typeof resource.source.authorizeRecord === 'function', 'Provide record authorization');
     }
-    this.modules = modules;
+  }
+}
+export class GroveAdmin {
+  private readonly provider: ModuleProvider;
+  private readonly validated = new WeakSet<AdminModule[]>();
+  /** Modules may be a fixed list or a per-workspace provider (for example, registered remote connections); every list is validated before use. */
+  constructor(private db: Database, private authorize: Authorize, modules: AdminModule[] | ModuleProvider) {
+    if (Array.isArray(modules)) { validateModules(modules); this.validated.add(modules); this.provider = () => modules; }
+    else this.provider = modules;
+  }
+  private async modulesFor(scope: Scope): Promise<AdminModule[]> {
+    const modules = await this.provider(scope);
+    requireCondition(Array.isArray(modules), 'The module provider returned no list');
+    if (!this.validated.has(modules)) { validateModules(modules); this.validated.add(modules); }
+    return modules;
   }
   private context(ctx: Context) { scopeValid(ctx.scope); if (!ctx.actor?.id?.trim()) throw new GroveError('unauthenticated', 'Authentication required'); }
   private async permitted(ctx: Context, permission: Permission) { this.context(ctx); return !!await this.authorize(ctx.actor, ctx.scope, permission); }
   private async allowed(ctx: Context, permission: Permission) { if (!await this.permitted(ctx, permission)) throw new GroveError('forbidden', 'This operation is not available to your account.'); }
   private async resource(ctx: Context, moduleId: string, resourceId: string) {
     this.context(ctx); identifier(moduleId, 'Module'); identifier(resourceId, 'Resource');
-    const resource = this.modules.find(m => m.id === moduleId)?.resources.find(r => r.id === resourceId);
+    const resource = (await this.modulesFor(ctx.scope)).find(m => m.id === moduleId)?.resources.find(r => r.id === resourceId);
     if (!resource) throw new GroveError('not_found', 'Admin resource not found');
     await this.allowed(ctx, resource.permission); return resource;
   }
@@ -102,7 +114,7 @@ export class GroveAdmin {
   }
   async catalog(ctx: Context): Promise<AdminModuleInfo[]> {
     this.context(ctx); const result: AdminModuleInfo[] = [];
-    for (const module of this.modules) {
+    for (const module of await this.modulesFor(ctx.scope)) {
       const resources: AdminResourceInfo[] = [];
       for (const resource of module.resources) {
         if (!await this.permitted(ctx, resource.permission)) continue;

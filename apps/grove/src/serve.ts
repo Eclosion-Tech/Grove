@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
-import type { Actor } from '@eclosion-tech/grove/server';
+import type { Actor, InstanceKeys } from '@eclosion-tech/grove/server';
 
 /** What every host identity adapter supplies: who is calling, browser write protection, and its own sign-in routes. */
 export type Access = {
@@ -11,9 +11,11 @@ export type Access = {
 type Part = (request: Request) => Promise<Response | null>;
 
 /** One request pipeline for every host: sign-in routes, email, client site, the Grove API, then static files. */
-export function compose(parts: { access: Access; email: Part; clientSite: Part; handler: (request: Request) => Promise<Response>; static: (request: Request) => Promise<Response> }) {
+export function compose(parts: { access: Access; email: Part; clientSite: Part; handler: (request: Request) => Promise<Response>; static: (request: Request) => Promise<Response>; keys?: InstanceKeys }) {
   return async (request: Request): Promise<Response> => {
     const path = new URL(request.url).pathname;
+    // Public keys applications use to verify this instance's signed module requests. Public by design, never cached for long.
+    if (path === '/.well-known/grove-keys' && parts.keys) return ['GET', 'HEAD'].includes(request.method) ? Response.json(await parts.keys.published(), { headers: { 'Cache-Control': 'public, max-age=300' } }) : new Response('Method not allowed', { status: 405 });
     const routed = await parts.access.route(request);
     if (routed) return routed;
     const emailed = path.startsWith('/email/') ? (await parts.access.protect(request)) ?? await parts.email(request) : await parts.email(request);

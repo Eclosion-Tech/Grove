@@ -75,8 +75,9 @@ export class InstanceKeys {
     await this.db.query('UPDATE grove_instance_keys SET retired_at = now() WHERE retired_at IS NULL');
     return this.current();
   }
-  /** The well-known document: active keys plus keys retired within the last day. */
+  /** The well-known document: active keys plus keys retired within the last day. A fresh instance mints its first key here. */
   async published(): Promise<{ keys: PublicJwk[] }> {
+    await this.current();
     const rows = await this.db.query("SELECT public_jwk FROM grove_instance_keys WHERE retired_at IS NULL OR retired_at > now() - interval '1 day' ORDER BY created_at DESC");
     return { keys: rows.map(r => r.public_jwk as PublicJwk) };
   }

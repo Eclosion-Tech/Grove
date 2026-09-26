@@ -1,10 +1,10 @@
-import { Accounts, Grove, GroveAdmin, SessionStore, createHandler, createPostgresDatabase, localStorage, migrate, s3Storage, type Authorize } from '@eclosion-tech/grove/server';
+import { Accounts, Grove, GroveAdmin, InstanceKeys, SessionStore, createHandler, createPostgresDatabase, localStorage, migrate, s3Storage, type Authorize } from '@eclosion-tech/grove/server';
 import type { Scope } from '@eclosion-tech/grove';
 import { emailApi } from './email.js';
 import { staticResponse } from './browser.js';
 import { exampleApi } from './example-api.js';
 import { compose, listen, type Access } from './serve.js';
-import { loadAdminModules } from './modules.js';
+import { connectionsFor, loadAdminModules, moduleProvider } from './modules.js';
 import { OPERATOR_ACTOR } from './identity.js';
 import { OidcClient } from './oidc-client.js';
 import { oidcAccess } from './oidc.js';
@@ -37,7 +37,9 @@ const storage = process.env.SYNTROPY_BLOB_API_KEY
 const inScope = (requested: Scope) => requested.tenantId === scope.tenantId && requested.siteId === scope.siteId && requested.environment === scope.environment;
 const authorize: Authorize = async (actor, requested, permission) => inScope(requested) && (actor.id === OPERATOR_ACTOR ? true : grove.members.authorize(actor, requested, permission));
 const grove = new Grove(db, authorize, { storage });
-const admin = new GroveAdmin(db, authorize, await loadAdminModules(scope));
+const keys = new InstanceKeys(db);
+const connections = connectionsFor(db, { keys, hostId: publicUrl.origin, authorize, onError: error => console.error(error) });
+const admin = new GroveAdmin(db, authorize, moduleProvider({ modules: await loadAdminModules(scope), connections, onError: error => console.error(error) }));
 const identity = { sessions: new SessionStore(db), members: grove.members, scope, publicUrl: publicUrl.origin, operatorToken, onError: (error: unknown) => console.error(error) };
 const access: Access = mode === 'oidc'
   ? oidcAccess({ ...identity, tenantClaim: process.env.GROVE_OIDC_TENANT_CLAIM || undefined, client: new OidcClient({
@@ -52,10 +54,10 @@ const email = emailApi({ grove, scope, authorize, authenticate: access.authentic
   replyTo: process.env.GROVE_EMAIL_REPLY_TO, publicUrl: publicUrl.origin,
   signingSecret: process.env.GROVE_EMAIL_SIGNING_SECRET ?? operatorToken ?? env('DATABASE_URL'),
 } });
-const handler = createHandler(grove, { authenticate: access.authenticate, admin, onError: error => console.error(error) });
+const handler = createHandler(grove, { authenticate: access.authenticate, admin, connections, onError: error => console.error(error) });
 listen({
   port: Number(process.env.PORT ?? 4310), bind: process.env.GROVE_BIND ?? '0.0.0.0', protocol: publicUrl.protocol === 'https:' ? 'https' : 'http',
   hosts: () => [publicUrl.host],
-  route: compose({ access, email, clientSite: exampleApi(grove, scope, access.authenticate), handler, static: staticResponse }),
+  route: compose({ access, email, clientSite: exampleApi(grove, scope, access.authenticate), handler, static: staticResponse, keys }),
   close: () => db.close(), label: `Grove (${mode} sign-in) for ${scope.tenantId}/${scope.siteId} at ${publicUrl.origin}`,
 });
