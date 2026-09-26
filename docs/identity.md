@@ -1,20 +1,58 @@
-# Production identity — Syntropy Auth host
+# Identity — sign-in and membership
 
-Recorded 2026-09-17. This decides the "Syntropy host" milestone from [spec.md](spec.md) as far as identity and authorization go. It was verified against a conforming stand-in OIDC provider and real PostgreSQL, not yet against a registered client on a live Syntropy Auth instance.
+Recorded 2026-09-26, replacing the 2026-09-17 Syntropy-only design. Grove is a standalone application with its own sign-in, and any OpenID Connect provider can be plugged in, the way Pear ships native email/password by default and takes an OIDC provider by configuration. In both cases membership is Grove's.
 
-## What Syntropy provides, and what it does not
+## Two questions, two owners
 
-Syntropy has three identity systems. Auth0 signs in dashboard staff. Syntropy Auth is the OIDC provider for products built on the platform. Project API keys identify servers. A hosted Synapp receives no gateway headers, no shared cookie and no session-validation API; the supported path is an ordinary OIDC login against Syntropy Auth with a registered client. That login yields a stable subject, a verified email and the organization that owns the user pool. It yields no role: dashboard admin/member roles live in a separate user directory that no API exposes.
+- **Who is this person?** The sign-in method answers: Grove's native accounts, or an OpenID Connect provider. Either way the host ends up with a stable subject, an email address and whether that address is verified.
+- **What may they do here?** Grove's membership table answers, per workspace. Identity providers are never asked for roles.
 
-## Decision
+## Sign-in modes
 
-- **Identity:** Syntropy Auth, authorization-code flow with PKCE, through the published `@eclosion-tech/syntropy-auth` client. Scopes `openid email profile org`; no refresh token, because Grove never acts on the user's behalf against Syntropy. Access tokens are revoked after the identity is read.
-- **Authorization:** Grove-owned membership. `grove_members` holds one row per invited email per tenant/site/environment with a role and optional explicit `admin:<module>:<capability>` grants. Syntropy says who the person is; Grove says what they may do.
-- **Tenancy:** `tenantId` is the Syntropy organization id carried in the `org` claim. Sign-in is refused when the account's pool belongs to a different organization or to a project pool. One deployment serves one organization, because Syntropy user pools and single sign-on are organization-scoped; `siteId` and `environment` are host configuration.
-- **Sessions:** server-side in `grove_sessions`, identified by a random 256-bit id of which only a SHA-256 hash is stored. Eight hours, HttpOnly, SameSite=Strict, Secure on https. Browser writes require the session's CSRF token and a matching Origin. Sign-in attempts live ten minutes, are bound to a Lax cookie scoped to `/auth`, and are consumed once.
-- **Operator token:** an optional server-only bearer credential for CI schema pushes and first-owner bootstrap. It authenticates as the `operator` actor, which holds every permission in the configured scope, is never a member, and can never sign in through the browser.
+### Native accounts (default)
 
-## Roles
+`GROVE_AUTH_MODE=password`. Accounts live in `grove_accounts`; passwords are hashed with scrypt (N=32768, r=8, p=1, 64-byte key, 16-byte salt). Nothing is emailed. A workspace owner invites a member by email, then creates a one-time link for them:
+
+```sh
+npm run grove -- members invite editor@client.example --role editor
+npm run grove -- members link editor@client.example
+# → https://grove.example.org/accept#token=…  (valid 7 days, single use)
+```
+
+Opening the link shows a set-password screen; accepting it sets the password, binds the membership to the new account and signs the member in. Passwords are 12 to 256 characters. Members change their own password from the sidebar. A forgotten password is reset the same way an account is created: an owner issues a new link. Ten failed sign-ins for one email address lock it for fifteen minutes on that host process. The link is only issued for an address that is already a member, so owners cannot mint accounts for strangers, and a link carries the token in the URL fragment so it never reaches server logs.
+
+### OpenID Connect
+
+`GROVE_AUTH_MODE=oidc`. Grove is a standard relying party: discovery, authorization-code flow with PKCE, `client_secret_post`, userinfo, best-effort token revocation. The provider's discovery document must name the configured issuer.
+
+| Variable | Meaning |
+| --- | --- |
+| `GROVE_OIDC_ISSUER` | Issuer URL, https outside loopback |
+| `GROVE_OIDC_CLIENT_ID`, `GROVE_OIDC_CLIENT_SECRET` | The registered confidential client |
+| `GROVE_OIDC_SCOPES` | Space-separated; default `openid email profile` |
+| `GROVE_OIDC_TENANT_CLAIM` | Optional dotted claim path that must equal `GROVE_TENANT`, for example `org.id`. Unset means any account the provider vouches for may hold a membership |
+
+Register `https://<grove-host>/auth/callback` as the redirect URI. Grove requests no refresh token: it never acts on the member's behalf against the provider. If userinfo fails, the id_token that arrived directly from the token endpoint is used after its issuer, audience and expiry are checked.
+
+**Syntropy Auth preset.** Register a confidential client in the Syntropy dashboard against the client organization's **org-level** user pool, then:
+
+```dotenv
+GROVE_AUTH_MODE=oidc
+GROVE_OIDC_ISSUER=https://auth.syntropy.chat
+GROVE_OIDC_SCOPES=openid email profile org
+GROVE_OIDC_TENANT_CLAIM=org.id
+GROVE_TENANT=<the Syntropy organization id>
+```
+
+Syntropy's `org` claim carries the pool owner's id, so accounts from another organization, or from a project-level pool, are refused. Syntropy supplies no role; membership below applies unchanged. Anything Syntropy-specific beyond configuration, such as organization membership sync or the dashboard module, belongs in a Syntropy edition outside this repository, as pear-cloud extends Pear.
+
+### Development host
+
+`npm run dev:local` and `npm run dev` keep the development token and practice roles. The deployable host refuses both.
+
+## Membership
+
+`grove_members` holds one row per invited email per tenant, site and environment with a role and optional explicit `admin:<module>:<capability>` grants.
 
 | Role | CMS permissions |
 | --- | --- |
@@ -26,41 +64,43 @@ Syntropy has three identity systems. Auth0 signs in dashboard staff. Syntropy Au
 
 Extra `permissions` on a member are application-module grants only; CMS capabilities always come from the role. Owners manage members. A workspace must keep at least one signed-in owner: the last accepted owner cannot be removed or demoted, while a pending owner invitation can always be corrected.
 
-An invitation is keyed by email. On the first sign-in whose verified email matches, the invitation binds to that account's subject and is thereafter matched by subject only, so a later email change at Syntropy does not lock the member out and a different account with the same address cannot take the seat over.
+An invitation is keyed by email. On the first sign-in whose verified email matches, the invitation binds to that identity's subject and is matched by subject from then on, so a later email change does not lock the member out and another account with the same address cannot take the seat.
+
+## Sessions and the operator token
+
+Sessions are server-side rows in `grove_sessions` identified by a random 256-bit id of which only a SHA-256 hash is stored. Eight hours, HttpOnly, SameSite=Strict, Secure on https. Browser writes require the session's CSRF token and a matching Origin. OIDC sign-in attempts live ten minutes in a Lax cookie scoped to `/auth` and are consumed once. A session whose membership has been removed is revoked on the next session read.
+
+`GROVE_OPERATOR_TOKEN` is an optional server-only bearer credential for CI schema pushes and first-owner bootstrap. It authenticates as the `operator` actor, which holds every permission in the configured scope, is never a member, and can never sign in through the browser.
 
 ## Deploying
 
-1. In the Syntropy dashboard, Settings → Auth Clients, register a client against the client organization's **org-level** user pool. Redirect URI: `https://<grove-host>/auth/callback`. Allowed origin: `https://<grove-host>`. Keep the client secret server-side.
-2. Configure the Synapp environment:
+```dotenv
+DATABASE_URL=postgres://...
+GROVE_PUBLIC_URL=https://grove.example.org
+GROVE_TENANT=<workspace tenant id>
+GROVE_SITE=<site slug>
+GROVE_ENVIRONMENT=production
+GROVE_OPERATOR_TOKEN=<random, at least 32 characters>
+GROVE_AUTH_MODE=password              # or oidc plus the GROVE_OIDC_* variables above
+# Media: GROVE_MEDIA_DIRECTORY or the GROVE_S3_* variables from .env.example
+# Email: the GROVE_EMAIL_* variables; GROVE_EMAIL_SIGNING_SECRET is required once GROVE_EMAIL_API_KEY is set
+# Application modules: GROVE_ADMIN_MODULES, see admin-platform.md
+```
 
-   ```dotenv
-   DATABASE_URL=postgres://...
-   GROVE_PUBLIC_URL=https://grove.example.org
-   GROVE_TENANT=<syntropy organization id>
-   GROVE_SITE=<site slug>
-   GROVE_ENVIRONMENT=production
-   SYNTROPY_AUTH_URL=https://auth.syntropy.chat
-   SYNTROPY_AUTH_CLIENT_ID=<client id>
-   SYNTROPY_AUTH_CLIENT_SECRET=<client secret>
-   GROVE_OPERATOR_TOKEN=<random, at least 32 characters>
-   # Media: GROVE_MEDIA_DIRECTORY or the GROVE_S3_* variables from .env.example
-   # Email: the GROVE_EMAIL_* variables; GROVE_EMAIL_SIGNING_SECRET is required once GROVE_EMAIL_API_KEY is set
-   ```
+`npm run build && npm run host` applies migrations at boot, binds `0.0.0.0` (`GROVE_BIND` overrides) on `PORT`, and only answers requests whose Host header matches `GROVE_PUBLIC_URL`. Bootstrap the first owner with the operator token:
 
-3. Start with `npm run build && npm run host:syntropy`. The host applies migrations at boot, binds `0.0.0.0` (`GROVE_BIND` overrides) on `PORT`, and only answers requests whose Host header matches `GROVE_PUBLIC_URL`. It refuses `GROVE_DEV_TOKEN`, `GROVE_LOCAL_LOGIN` and `GROVE_PBA_CONFIG`.
-4. Invite the first owner with the operator token, then sign in:
+```sh
+export GROVE_URL=https://grove.example.org GROVE_TOKEN="$GROVE_OPERATOR_TOKEN" GROVE_TENANT=<tenant> GROVE_SITE=<site> GROVE_ENVIRONMENT=production
+npm run grove -- members invite owner@client.example --role owner
+npm run grove -- members link owner@client.example        # password mode only
+npm run grove -- schema push examples/schema.ts --expected 0
+```
 
-   ```sh
-   export GROVE_URL=https://grove.example.org GROVE_TOKEN="$GROVE_OPERATOR_TOKEN" GROVE_TENANT=<org id> GROVE_SITE=<site> GROVE_ENVIRONMENT=production
-   npm run grove -- members invite owner@client.example --role owner
-   npm run grove -- schema push examples/schema.ts --expected 0
-   ```
-
-The editor shows **Sign in with Syntropy** when the host offers a login URL. `GET /auth/session` reports the member's email, name, role and CSRF token; `POST /auth/logout` ends the Grove session only and leaves the Syntropy session alone.
+In OIDC mode the owner simply signs in; the invitation binds on that first sign-in.
 
 ## API and CLI
 
-Base: `/v1/tenants/:tenant/sites/:site/environments/:environment/members`.
+Membership, under `/v1/tenants/:tenant/sites/:site/environments/:environment/members`:
 
 | Method | Path | Permission |
 | --- | --- | --- |
@@ -69,30 +109,33 @@ Base: `/v1/tenants/:tenant/sites/:site/environments/:environment/members`.
 | PATCH | `/members/:id` `{role?, permissions?}` | `members:write` |
 | DELETE | `/members/:id` | `members:write` |
 
-```sh
-npm run grove -- members list
-npm run grove -- members invite editor@client.example --role editor --permissions admin:registrations:read
-npm run grove -- members update <id> --role publisher
-npm run grove -- members remove <id>
-```
+Sign-in, owned by the host:
+
+| Method | Path | Mode | Behavior |
+| --- | --- | --- | --- |
+| GET | `/auth/session` | both | Current member, CSRF token and mode, or 401 with `{mode}` |
+| POST | `/auth/login` `{email, password}` | password | Same-origin; uniform 401; 429 when locked |
+| POST | `/auth/accept` `{token, password}` | password | Consumes the link, sets the password, signs in |
+| POST | `/auth/invitations` `{email}` | password | Owner or operator; email must already be a member; returns the one-time URL |
+| POST | `/auth/password` `{current, next}` | password | Signed-in member, CSRF required |
+| GET | `/auth/login` | oidc | Redirects to the provider |
+| GET | `/auth/callback` | oidc | Completes sign-in |
+| POST | `/auth/logout` | both | Same-origin, CSRF required; ends the Grove session only |
+
+CLI: `members list|invite|update|remove|link`.
 
 ## Verification
 
-`tests/access.test.ts` covers the role map, invitation binding, subject-based authorization through the service, owner protection, input validation, the HTTP routes and the session store, all against real PostgreSQL. `tests/syntropy.test.ts` runs the complete sign-in flow against a stand-in provider that implements discovery, PKCE-checked code exchange, opaque access tokens, an id_token and a userinfo endpoint that can be switched off: PKCE and state, cookie attributes, invitation binding, session persistence across a host restart, CSRF and origin checks on writes, single-use attempts, non-member and unverified and wrong-organization refusals, tampered state, failed exchanges, the id_token fallback's issuer/audience/expiry checks, the operator token, logout, expiry and removal.
+`tests/access.test.ts` covers the role map, invitation binding, subject-based authorization through the service, owner protection, input validation, the HTTP routes and the session store. `tests/password.test.ts` covers scrypt hashing, uniform verification, single-use and expiring links, the accept flow, CSRF on password changes and link minting, lockout, non-member refusal and revocation on removal. `tests/oidc.test.ts` runs the complete flow against a stand-in provider: discovery issuer check, PKCE and state, cookie attributes, invitation binding, restart persistence, tenant-claim binding on and off, tampered state, failed exchanges, the id_token fallback's issuer/audience/expiry checks, the operator token, logout, expiry and removal. All run against real PostgreSQL.
 
 ## Limits and remaining work
 
-- Not yet exercised against a live Syntropy Auth client. Registering a client for a real organization and completing one sign-in is the acceptance step before any client uses it. Syntropy's userinfo endpoint has been observed failing for hosted apps; the id_token fallback exists for that case.
-- One organization per deployment. Serving several organizations from one host needs one auth client per organization and tenant resolution from the request host.
-- No members UI in the editor yet; the CLI and API are the management surface. No per-site API tokens beyond the single operator credential.
-- Sign-in attempts are stored per `GET /auth/login`; expired attempts are purged on each new sign-in, but there is no rate limit.
-- The PBA registrations adapter binds to the local developer actor and is refused on this host until it maps to a member.
-- No browser QA has been performed on the sign-in screen.
+- No OIDC sign-in has been exercised against a live provider; one real sign-in, Syntropy Auth first, is the acceptance step before a client uses that mode.
+- One workspace per deployment. No members screen in the editor; the CLI and API are the management surface. No per-site API tokens beyond the operator credential.
+- The sign-in lockout is per host process and per email address; there is no request-level rate limit.
+- Invitation links are handed over by the owner, not emailed. Adding email delivery would be an optional adapter, not a requirement.
+- No browser QA has been performed on the sign-in, invitation or change-password screens.
 
 ## Syntropy project media storage
 
-For hosted Grove instances, set `SYNTROPY_BLOB_API_KEY` to a Syntropy project secret
-with `blobs:read` and `blobs:write` scopes. `SYNTROPY_BLOB_API_URL` defaults to
-`https://www.syntropy.chat/api/v1/blobs`. This adapter takes precedence over local
-or direct S3 configuration, keeps bucket credentials in Syntropy, and uses
-short-lived signed transfers within the owning project. See `deploy/worm/README.md`.
+For hosted Grove instances, set `SYNTROPY_BLOB_API_KEY` to a Syntropy project secret with `blobs:read` and `blobs:write` scopes. `SYNTROPY_BLOB_API_URL` defaults to `https://www.syntropy.chat/api/v1/blobs`. This storage adapter takes precedence over local or direct S3 configuration, keeps bucket credentials in Syntropy, and uses short-lived signed transfers within the owning project. It is a storage option selected by configuration, independent of the sign-in mode. See `deploy/worm/README.md`.

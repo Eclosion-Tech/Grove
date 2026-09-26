@@ -25,8 +25,9 @@ remain in Syntropy. The host limits images to 10 MB and never forwards the proje
 credential to object storage.
 
 Synapp containers do not expose persistent local media mounts; the default local
-media directory must not be used for this deployment. See `docs/identity.md` for
-sign-in and the remaining runtime variables.
+media directory must not be used for this deployment. Sign-in uses `GROVE_AUTH_MODE=oidc` with the Syntropy Auth preset from
+`docs/identity.md` (issuer `https://auth.syntropy.chat`, scopes including `org`,
+tenant claim `org.id`); that document lists the remaining runtime variables.
 
 The approved pilot origin is `https://admin.worm.so`; the initial owner is
 `kara@worm.so`. The authorized data environment is production, using `https://api.worm.so`.
@@ -39,7 +40,7 @@ sh deploy/worm/smoke.sh <built-image>
 
 This creates a disposable PostgreSQL container and a stand-in Worm API on a
 private Docker network. It checks the editor, session endpoint, Host validation,
-unauthenticated API denial, operator membership invitation, and all four Grove
+unauthenticated API denial, operator membership invitation, and all five Grove
 migrations, then removes the test containers and network. It does not publish
 ports, use live credentials, or certify live OIDC sign-in or Worm actions.
 

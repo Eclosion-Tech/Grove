@@ -45,7 +45,7 @@ The first three visible columns form the generic table; all allowed columns are 
 | Curriculum reviewer | Assigned lessons, approve/request revision |
 | Read-only observer | Both modules, public fields, no actions |
 
-Role changes require an existing session, matching origin and CSRF token, rotate CSRF, and change the server-authenticated actor. This role selector exists only in explicitly machine-trusting local mode. On the deployed Syntropy host, members receive application-module permissions as explicit `admin:*` grants; see [identity](identity.md). Fine-grained module permissions do not yet extend the CMS's existing coarse content permissions.
+Role changes require an existing session, matching origin and CSRF token, rotate CSRF, and change the server-authenticated actor. This role selector exists only in explicitly machine-trusting local mode. On a deployed host, members receive application-module permissions as explicit `admin:*` grants; see [identity](identity.md). Fine-grained module permissions do not yet extend the CMS's existing coarse content permissions.
 
 ## Action journal and outcomes
 

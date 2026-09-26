@@ -10,7 +10,7 @@ import { compose, listen } from './serve.js';
 const databaseUrl = process.env.DATABASE_URL;
 const token = process.env.GROVE_DEV_TOKEN;
 if (!databaseUrl || !token || token.length < 32) throw new Error('Set DATABASE_URL and a GROVE_DEV_TOKEN of at least 32 characters. See .env.example.');
-if (process.env.NODE_ENV === 'production') throw new Error('This is the local development host. Production runs the Syntropy host: npm run host:syntropy (see docs/identity.md).');
+if (process.env.NODE_ENV === 'production') throw new Error('This is the local development host. Production runs the deployable host: npm run host (see docs/identity.md).');
 const scope = {
   tenantId: process.env.GROVE_TENANT ?? 'local',
   siteId: process.env.GROVE_SITE ?? 'demo',

@@ -41,6 +41,7 @@ members list
 members invite <email> --role <owner|developer|publisher|editor|viewer> [--permissions <admin:module:capability,...>]
 members update <id> [--role <role>] [--permissions <admin:module:capability,...>]
 members remove <id>
+members link <email>          One-time sign-in link for an invited member (password hosts only)
 
 Use expected version 0 to create a schema or document. Restore always creates a draft.
 Members sign in through the host's identity provider; an invitation binds to their account on first verified sign-in.
@@ -97,6 +98,11 @@ async function main() {
     else if (action === 'invite' && id && role) output = await client.inviteMember({ email: id, role, permissions });
     else if (action === 'update' && id && (role || permissions)) output = await client.updateMember(id, { role, permissions });
     else if (action === 'remove' && id) output = await client.removeMember(id);
+    else if (action === 'link' && id) {
+      const response = await fetch(`${(process.env.GROVE_URL ?? 'http://127.0.0.1:4310').replace(/\/$/, '')}/auth/invitations`, { method: 'POST', headers: { Authorization: `Bearer ${process.env.GROVE_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: id }) });
+      output = await response.json();
+      if (!response.ok) throw new Error(typeof (output as any).error === 'string' ? (output as any).error : 'Could not create an invitation link');
+    }
     else throw new Error(usage);
   } else if (command === 'delivery' && action) output = await client.deliver(action, flag('locale'));
   else throw new Error(usage);

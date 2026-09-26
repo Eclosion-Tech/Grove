@@ -13,44 +13,79 @@ import { adminViews } from './admin-views.js';
 import { AdminWorkspace } from './AdminWorkspace.js';
 import { MediaBrowser } from '../../shared/References.js';
 
-type Session = { scope: Scope; csrf: string; actor: string; role?: string; demoRoles?: boolean; email?: string | null; name?: string | null; login?: string };
+type Session = { scope: Scope; csrf: string; actor: string; role?: string; demoRoles?: boolean; email?: string | null; name?: string | null; mode?: string; login?: string };
+type Gate = { mode: 'token'; local: boolean } | { mode: 'oidc'; login: string } | { mode: 'password' };
+const invitationToken = () => location.pathname === '/accept' ? new URLSearchParams(location.hash.slice(1)).get('token') ?? '' : '';
+async function post(path: string, body: unknown, headers: Record<string, string> = {}) {
+  const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+  const value = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof value.error === 'string' ? value.error : value.error?.message ?? 'Something went wrong. Try again.');
+  return value;
+}
 const message = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong. Try again.';
 
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
-  const [local, setLocal] = useState(false);
-  const [loginUrl, setLoginUrl] = useState('');
+  const [gate, setGate] = useState<Gate>({ mode: 'token', local: false });
   const [ready, setReady] = useState(false);
   const [token, setToken] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const invitation = gate.mode === 'password' ? invitationToken() : '';
   useEffect(() => { void fetch('/auth/session').then(async r => {
-    const value = await r.json(); if (r.ok) setSession(value); else { setLocal(value.localLogin === true); setLoginUrl(typeof value.login === 'string' ? value.login : ''); }
+    const value = await r.json();
+    if (r.ok) setSession(value);
+    else if (value.mode === 'oidc' && typeof value.login === 'string') setGate({ mode: 'oidc', login: value.login });
+    else if (value.mode === 'password') setGate({ mode: 'password' });
+    else setGate({ mode: 'token', local: value.localLogin === true });
   }).catch(e => setError(message(e))).finally(() => setReady(true)); }, []);
   async function login() {
-    if (loginUrl) { location.assign(loginUrl); return; }
+    if (gate.mode === 'oidc') { location.assign(gate.login); return; }
     setBusy(true); setError('');
     try {
+      if (invitation) {
+        if (password !== confirm) throw new Error('The two passwords do not match.');
+        const value = await post('/auth/accept', { token: invitation, password });
+        history.replaceState(null, '', '/'); setPassword(''); setConfirm(''); setSession(value); return;
+      }
+      if (gate.mode === 'password') { const value = await post('/auth/login', { email, password }); setPassword(''); setSession(value); return; }
       const response = await fetch('/auth/login', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
       const value = await response.json(); if (!response.ok) throw new Error(value.error);
       setToken(''); setSession(value);
     } catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
   if (!session) return <div className="login"><div className="login-brand"><Leaf size={36}/><span>grove<span className="brand-dot">.</span></span></div><form onSubmit={e => { e.preventDefault(); void login(); }} className="login-card">
-    <span className="eyebrow">YOUR CONTENT WORKSPACE</span><h1>Make yourself<br/>at home.</h1><p>A little room to write, shape, and publish.</p>
-    {!local && !loginUrl && <label>Development access token<input type="password" autoComplete="current-password" value={token} onChange={e => setToken(e.target.value)} required/><small>Use GROVE_DEV_TOKEN from your local .env file.</small></label>}
+    <span className="eyebrow">{invitation ? 'YOU’RE INVITED' : 'YOUR CONTENT WORKSPACE'}</span><h1>{invitation ? <>Choose a<br/>password.</> : <>Make yourself<br/>at home.</>}</h1><p>{invitation ? 'Use at least 12 characters. You’ll sign in with your email address and this password.' : 'A little room to write, shape, and publish.'}</p>
+    {invitation && <><label>New password<input type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} minLength={12} required/></label><label>Confirm password<input type="password" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} minLength={12} required/></label></>}
+    {!invitation && gate.mode === 'password' && <><label>Email<input type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} required/></label><label>Password<input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required/></label></>}
+    {!invitation && gate.mode === 'token' && !gate.local && <label>Development access token<input type="password" autoComplete="current-password" value={token} onChange={e => setToken(e.target.value)} required/><small>Use GROVE_DEV_TOKEN from your local .env file.</small></label>}
     {error && <p className="error" role="alert">{error}</p>}
-    <button className="primary" disabled={!ready || busy}>{busy ? 'Opening…' : loginUrl ? 'Sign in with Syntropy' : local ? 'Open local workspace' : 'Open workspace'}<ArrowUpRight size={18}/></button>
-    <small className="login-foot">{loginUrl ? 'Syntropy Grove' : 'Syntropy Grove · Local development'}</small>
+    <button className="primary" disabled={!ready || busy}>{busy ? 'Opening…' : invitation ? 'Set password and open workspace' : gate.mode === 'oidc' || gate.mode === 'password' ? 'Sign in' : gate.local ? 'Open local workspace' : 'Open workspace'}<ArrowUpRight size={18}/></button>
+    <small className="login-foot">{gate.mode === 'token' ? 'Grove · Local development' : 'Grove'}</small>
   </form></div>;
   return <Workspace key={session.actor} session={session} changeRole={async role => {
     const response = await fetch(`/auth/demo-role?role=${encodeURIComponent(role)}`, { method: 'POST', headers: { 'X-Grove-CSRF': session.csrf } });
     const value = await response.json(); if (!response.ok) throw new Error(value.error ?? 'Could not change role'); setSession(value);
   }} logout={async () => {
     const response = await fetch('/auth/logout', { method: 'POST', headers: { 'X-Grove-CSRF': session.csrf } });
-    if (response.ok) { setSession(null); setLocal(false); location.reload(); }
+    if (response.ok) { setSession(null); location.reload(); }
   }}/>;
+}
+
+function ChangePassword({ csrf }: { csrf: string }) {
+  const [open, setOpen] = useState(false); const [current, setCurrent] = useState(''); const [next, setNext] = useState(''); const [note, setNote] = useState('');
+  if (!open) return <button className="site-link" onClick={() => setOpen(true)}>Change password</button>;
+  return <form className="account-form" onSubmit={async e => { e.preventDefault(); setNote('');
+    try { await post('/auth/password', { current, next }, { 'X-Grove-CSRF': csrf }); setCurrent(''); setNext(''); setOpen(false); } catch (err) { setNote(message(err)); } }}>
+    <input type="password" placeholder="Current password" autoComplete="current-password" value={current} onChange={e => setCurrent(e.target.value)} required/>
+    <input type="password" placeholder="New password (12+ characters)" autoComplete="new-password" value={next} onChange={e => setNext(e.target.value)} minLength={12} required/>
+    {note && <small className="error" role="alert">{note}</small>}
+    <span><button className="primary">Save</button><button type="button" onClick={() => setOpen(false)}>Cancel</button></span>
+  </form>;
 }
 
 function Workspace({ session, logout, changeRole }: { session: Session; logout: () => Promise<void>; changeRole: (role: string) => Promise<void> }) {
@@ -120,7 +155,7 @@ function Workspace({ session, logout, changeRole }: { session: Session; logout: 
       <span className="nav-caption collections">COLLECTIONS</span>
       {registry?.definition.types.filter(t => t.name !== 'email').map(t => <button key={t.name} className={`collection ${t.name === typeName ? 'chosen' : ''}`} onClick={() => void navigate(() => { setActiveAdmin(null); setMedia(false); setTypeName(t.name); setSelected(null); setSearch(''); })}><span className="collection-dot"/>{t.label ?? t.name}<span>{documents.filter(d => d.type === t.name).length}</span></button>)}
       </>}{modules.length > 0 && <span className="nav-caption applications">APPLICATIONS</span>}{modules.map(module => module.resources.map(resource => <button key={`${module.id}-${resource.id}`} className={`nav-item ${activeAdmin?.module === module.id && activeAdmin.resource === resource.id ? 'active' : ''}`} onClick={() => void navigate(() => { setSelected(null); setMedia(false); setActiveAdmin({ module: module.id, resource: resource.id }); })}><FolderOpen size={18}/>{resource.label}</button>))}
-      <div className="sidebar-bottom"><a className="site-link" href="/example-site/" onClick={e => { e.preventDefault(); void navigate(() => location.assign('/example-site/')); }}><ArrowUpRight size={18}/>Open example site</a>{session.demoRoles && <label className="practice-role">Practice as<select aria-label="Practice role" value={session.role ?? 'owner'} onChange={e => { const role = e.target.value; void navigate(() => { void changeRole(role).catch(e => setModuleError(message(e))); }); }}><option value="owner">Workspace owner</option><option value="coordinator">Class coordinator</option><option value="reviewer">Curriculum reviewer</option><option value="observer">Read-only observer</option></select></label>}<div className="profile"><div className="avatar">L</div><div><strong>{session.role && session.role !== 'owner' ? session.role[0]!.toUpperCase() + session.role.slice(1) : 'Local developer'}</strong><small>Syntropy Grove</small></div><button className="icon-button" aria-label="Sign out" onClick={() => void navigate(() => { void logout(); })}><LogOut size={17}/></button></div></div>
+      <div className="sidebar-bottom"><a className="site-link" href="/example-site/" onClick={e => { e.preventDefault(); void navigate(() => location.assign('/example-site/')); }}><ArrowUpRight size={18}/>Open example site</a>{session.mode === 'password' && <ChangePassword csrf={session.csrf}/>}{session.demoRoles && <label className="practice-role">Practice as<select aria-label="Practice role" value={session.role ?? 'owner'} onChange={e => { const role = e.target.value; void navigate(() => { void changeRole(role).catch(e => setModuleError(message(e))); }); }}><option value="owner">Workspace owner</option><option value="coordinator">Class coordinator</option><option value="reviewer">Curriculum reviewer</option><option value="observer">Read-only observer</option></select></label>}<div className="profile"><div className="avatar">L</div><div><strong>{session.role && session.role !== 'owner' ? session.role[0]!.toUpperCase() + session.role.slice(1) : 'Local developer'}</strong><small>Syntropy Grove</small></div><button className="icon-button" aria-label="Sign out" onClick={() => void navigate(() => { void logout(); })}><LogOut size={17}/></button></div></div>
     </aside>
     <main className="main"><header className="topbar"><span>Workspace</span><ChevronRight size={14}/><strong>{emailOpen ? 'Email' : adminModule?.label ?? (media ? 'Media' : 'Content')}</strong><div className="environment"><i/>{session.scope.environment}</div></header>
       {moduleError && <p className="error" role="alert">{moduleError}<button onClick={() => void loadModules()}>Retry</button></p>}

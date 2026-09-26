@@ -9,7 +9,6 @@
   "dependencies": {
     "@eclosion-tech/grove": "0.1.0",
     "@eclosion-tech/grove-email": "0.1.0",
-    "@eclosion-tech/syntropy-auth": "0.3.1",
     "sharp": "^0.35.4"
   }
 }
