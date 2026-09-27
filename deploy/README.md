@@ -15,3 +15,12 @@ sh deploy/smoke.sh grove:local
 ```
 
 This starts a disposable PostgreSQL container on a private network, boots the image in password mode, and checks the editor, the anonymous session endpoint, Host validation, unauthenticated API denial, the published signing keys, an operator invitation, and that every migration applied. It publishes no ports and uses no live credentials.
+
+## Publish through CI
+
+Run **Publish Host Image** (`.forgejo/workflows/publish-host.yml`) with a full
+source commit SHA that is already merged into `main`. The workflow uses the
+configured `CONTAINER_REGISTRY`, `REGISTRY_USER`, and `REGISTRY_PASSWORD`, builds
+the Linux amd64 host, and reports its immutable image digest. It does not deploy
+instances. Configure hosts with the reported `@sha256:` reference and a separate
+read-only runtime pull credential when the registry is private.
