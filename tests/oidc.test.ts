@@ -10,7 +10,7 @@ import { oidcAccess } from '../apps/grove/src/oidc.js';
 import { OPERATOR_ACTOR } from '../apps/grove/src/identity.js';
 import { compose } from '../apps/grove/src/serve.js';
 
-type User = { sub: string; email: string; email_verified: boolean; name?: string; org?: { id: string; owner_type: string } };
+type User = { sub: string; email: string; email_verified: boolean; name?: string; org?: { id: string; owner_type: string; pool_id?: string } };
 const db = createPostgresDatabase(process.env.TEST_DATABASE_URL!);
 const clientId = 'grove-test'; const clientSecret = 'grove-test-secret';
 const origin = 'http://127.0.0.1:4310';
@@ -56,12 +56,12 @@ before(async () => {
 });
 after(async () => { provider.server?.close(); await db.close(); });
 
-function host(overrides: { secret?: string; operatorToken?: string; sessionTtlMs?: number; tenantClaim?: string | null } = {}) {
+function host(overrides: { secret?: string; operatorToken?: string; sessionTtlMs?: number; tenantClaim?: string | null; requiredClaims?: Record<string, string> } = {}) {
   const scope: Scope = { tenantId: randomUUID(), siteId: 'site', environment: 'production' };
   const inScope = (requested: typeof scope) => requested.tenantId === scope.tenantId && requested.siteId === scope.siteId && requested.environment === scope.environment;
   const grove: Grove = new Grove(db, async (actor, requested, permission) => inScope(requested) && (actor.id === OPERATOR_ACTOR ? true : grove.members.authorize(actor, requested, permission)));
   const client = new OidcClient({ issuer: provider.issuer, clientId, clientSecret: overrides.secret ?? clientSecret, redirectUri: `${origin}/auth/callback`, scopes: ['openid', 'email', 'profile', 'org'] });
-  const make = () => oidcAccess({ client, tenantClaim: overrides.tenantClaim === null ? undefined : overrides.tenantClaim ?? 'org.id', sessions: new SessionStore(db), members: grove.members, scope, publicUrl: origin, operatorToken: overrides.operatorToken, sessionTtlMs: overrides.sessionTtlMs, onError: () => {} });
+  const make = () => oidcAccess({ client, requiredClaims: overrides.requiredClaims, tenantClaim: overrides.tenantClaim === null ? undefined : overrides.tenantClaim ?? 'org.id', sessions: new SessionStore(db), members: grove.members, scope, publicUrl: origin, operatorToken: overrides.operatorToken, sessionTtlMs: overrides.sessionTtlMs, onError: () => {} });
   const access = make();
   const route = compose({ access, email: async () => null, clientSite: async () => null, handler: createHandler(grove, { authenticate: access.authenticate }), static: async () => new Response('static') });
   const member = (email: string, sub: string = randomUUID()): User => ({ sub, email, email_verified: true, name: 'Member', org: { id: scope.tenantId, owner_type: 'org' } });
@@ -199,3 +199,33 @@ test('logout, expiry and removal all end access; a removed member is signed out 
   assert.equal(gone.status, 401); assert.match(gone.headers.get('set-cookie')!, /grove_session=; .*Max-Age=0/);
   assert.equal((await h.route(new Request(`${h.api}/documents`, { headers: { cookie: third.sessionCookie! } }))).status, 401);
 });
+
+for (const ownerType of ['org', 'project']) {
+  test(`${ownerType} pool constraints bind sign-in independently of the content tenant, including id_token fallback`, async t => {
+    t.after(() => { provider.userinfo = 'up'; });
+    const ownerId = randomUUID(), poolId = randomUUID();
+    const h = host({ tenantClaim: null, requiredClaims: { 'org.id': ownerId, 'org.owner_type': ownerType, 'org.pool_id': poolId } });
+    assert.notEqual(h.scope.tenantId, ownerId);
+    await h.grove.members.invite(h.operator, { email: 'invited@example.org', role: 'viewer' });
+    const user = { ...h.member('invited@example.org'), org: { id: ownerId, owner_type: ownerType, pool_id: poolId } };
+    for (const mode of ['up', 'down'] as const) {
+      provider.userinfo = mode;
+      for (const org of [undefined, { ...user.org, id: randomUUID() }, { ...user.org, owner_type: ownerType === 'project' ? 'org' : 'project' }, { ...user.org, pool_id: randomUUID() }, { id: ownerId, owner_type: ownerType }]) {
+        const denied = await signIn(h, { ...user, org });
+        assert.equal(denied.callback.status, 403); assert.equal(denied.sessionCookie, undefined);
+      }
+    }
+    assert.equal((await h.grove.members.list(h.operator))[0]!.subject, null, 'rejected scopes never bind invitations');
+    for (const mode of ['up', 'down'] as const) {
+      provider.userinfo = mode;
+      const outsider = await signIn(h, { ...user, sub: randomUUID(), email: 'outsider@example.org' });
+      assert.equal(outsider.callback.status, 403); assert.equal(outsider.sessionCookie, undefined);
+      const ok = await signIn(h, user);
+      assert.equal(ok.callback.status, 303); assert.ok(ok.sessionCookie);
+      const session = await (await h.route(new Request(`${origin}/auth/session`, { headers: { cookie: ok.sessionCookie! } }))).json();
+      assert.deepEqual(session.scope, h.scope); assert.equal(session.role, 'viewer');
+    }
+    const password = await h.route(new Request(`${origin}/auth/login`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify({ email: user.email, password: 'unused-password' }) }));
+    assert.equal(password.headers.getSetCookie().some(cookie => cookie.startsWith('grove_session=')), false);
+  });
+}

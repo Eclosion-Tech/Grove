@@ -7,6 +7,7 @@ import { compose, listen, type Access } from './serve.js';
 import { connectionsFor, loadAdminModules, moduleProvider } from './modules.js';
 import { OPERATOR_ACTOR } from './identity.js';
 import { OidcClient } from './oidc-client.js';
+import { parseRequiredClaims } from './oidc-claims.js';
 import { oidcAccess } from './oidc.js';
 import { passwordAccess } from './password.js';
 
@@ -19,6 +20,7 @@ const env = (name: string, minimum = 1): string => {
 if (process.env.GROVE_LOCAL_LOGIN === '1' || process.env.GROVE_DEV_TOKEN) throw new Error('The deployable host has no development token or practice roles. Remove GROVE_LOCAL_LOGIN and GROVE_DEV_TOKEN.');
 const mode = process.env.GROVE_AUTH_MODE ?? 'password';
 if (mode !== 'password' && mode !== 'oidc') throw new Error('GROVE_AUTH_MODE must be password or oidc.');
+const requiredClaims = mode === 'oidc' ? parseRequiredClaims(process.env.GROVE_OIDC_REQUIRED_CLAIMS) : undefined;
 const publicUrl = new URL(env('GROVE_PUBLIC_URL'));
 if (publicUrl.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(publicUrl.hostname)) throw new Error('GROVE_PUBLIC_URL must be an https origin; http is accepted only on loopback for local trials.');
 if (publicUrl.pathname !== '/' || publicUrl.search || publicUrl.hash || publicUrl.username) throw new Error('GROVE_PUBLIC_URL must be a bare origin such as https://grove.example.org');
@@ -38,7 +40,7 @@ const connections = connectionsFor(db, { keys, hostId: publicUrl.origin, authori
 const admin = new GroveAdmin(db, authorize, moduleProvider({ modules: await loadAdminModules(scope), connections, onError: error => console.error(error) }));
 const identity = { sessions: new SessionStore(db), members: grove.members, scope, publicUrl: publicUrl.origin, operatorToken, onError: (error: unknown) => console.error(error) };
 const access: Access = mode === 'oidc'
-  ? oidcAccess({ ...identity, tenantClaim: process.env.GROVE_OIDC_TENANT_CLAIM || undefined, client: new OidcClient({
+  ? oidcAccess({ ...identity, requiredClaims, tenantClaim: process.env.GROVE_OIDC_TENANT_CLAIM || undefined, client: new OidcClient({
       issuer: env('GROVE_OIDC_ISSUER'), clientId: env('GROVE_OIDC_CLIENT_ID'), clientSecret: env('GROVE_OIDC_CLIENT_SECRET'),
       redirectUri: `${publicUrl.origin}/auth/callback`,
       scopes: (process.env.GROVE_OIDC_SCOPES ?? 'openid email profile').split(/\s+/).filter(Boolean),
