@@ -30,11 +30,14 @@ Opening the link shows a set-password screen; accepting it sets the password, bi
 | `GROVE_OIDC_ISSUER` | Issuer URL, https outside loopback |
 | `GROVE_OIDC_CLIENT_ID`, `GROVE_OIDC_CLIENT_SECRET` | The registered confidential client |
 | `GROVE_OIDC_SCOPES` | Space-separated; default `openid email profile` |
+| `GROVE_OIDC_REQUIRED_CLAIMS` | Optional JSON object of dotted claim paths and exact string values; every value must match before membership lookup |
 | `GROVE_OIDC_TENANT_CLAIM` | Optional dotted claim path that must equal `GROVE_TENANT`, for example `org.id`. Unset means any account the provider vouches for may hold a membership |
 
 Register `https://<grove-host>/auth/callback` as the redirect URI. Grove requests no refresh token: it never acts on the member's behalf against the provider. If userinfo fails, the id_token that arrived directly from the token endpoint is used after its issuer, audience and expiry are checked.
 
 **Multi-tenant providers.** Where a provider puts the owning organization in a claim, set `GROVE_OIDC_TENANT_CLAIM` to that claim's dotted path (for example `org.id`) and `GROVE_TENANT` to the expected value; accounts from any other organization are refused. Providers supply no role; membership below applies unchanged. Anything specific to one provider beyond configuration belongs in a hosted edition outside this repository.
+
+**Project or directory scoping.** Use `GROVE_OIDC_REQUIRED_CLAIMS` when the identity directory differs from the content tenant. For example, `{"org.owner_type":"project","org.id":"<project UUID>","org.pool_id":"<pool UUID>"}` pins sign-in to one project pool while `GROVE_TENANT` keeps its existing content and membership scope. Request the provider scope that supplies these claims (Syntropy uses `openid email profile org`). Leave `GROVE_OIDC_TENANT_CLAIM` unset in that case; if both constraints are configured, both must pass. Missing or mismatched claims are rejected for userinfo and id-token fallback alike, before an invitation can bind. These checks grant no membership or role. Invalid JSON or invalid constraint values prevent OIDC startup.
 
 ### Development host
 

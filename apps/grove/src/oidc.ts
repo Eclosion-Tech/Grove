@@ -1,10 +1,13 @@
 import { FAILURES, cookies, equal, hostIdentity, page, text, type IdentityOptions, type VerifiedIdentity } from './identity.js';
+import { parseRequiredClaims, matchesRequiredClaims } from './oidc-claims.js';
 import type { OidcClient, Tokens } from './oidc-client.js';
 
 export type OidcAccessOptions = Omit<IdentityOptions, 'mode'> & {
   client: OidcClient;
   /** Dotted path to a claim that must equal the workspace tenant id, for example `org.id`. Unset means any account the provider vouches for may hold a membership. */
   tenantClaim?: string;
+  /** Exact claim values required independently of the content tenant. */
+  requiredClaims?: Record<string, string>;
   loginTtlMs?: number;
 };
 const claim = (claims: Record<string, unknown>, path: string): unknown => path.split('.').reduce<unknown>((value, key) => value && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined, claims);
@@ -15,6 +18,7 @@ function normalize(claims: Record<string, unknown>): VerifiedIdentity & { claims
 
 /** Generic OpenID Connect sign-in: authorization-code flow with PKCE, Grove-owned membership, persistent server sessions. */
 export function oidcAccess(options: OidcAccessOptions) {
+  const requiredClaims = parseRequiredClaims(options.requiredClaims === undefined ? undefined : JSON.stringify(options.requiredClaims));
   const host = hostIdentity({ ...options, mode: 'oidc' });
   const loginTtl = options.loginTtlMs ?? 10 * 60_000;
   // The sign-in attempt cookie must survive the top-level redirect back from the provider, so it is Lax and scoped to /auth only.
@@ -51,6 +55,7 @@ export function oidcAccess(options: OidcAccessOptions) {
       return fail(502, 'Sign-in could not be completed', 'The identity provider did not accept this sign-in. Try again in a moment.');
     }
     if (options.tenantClaim && String(claim(who.claims, options.tenantClaim) ?? '') !== options.scope.tenantId) return fail(403, 'Wrong organization', 'This account does not belong to the organization that owns this workspace.');
+    if (!matchesRequiredClaims(who.claims, requiredClaims)) return fail(403, 'Wrong sign-in scope', 'This account does not belong to the identity directory configured for this workspace.');
     const result = await host.signIn(who);
     if (!result.ok) return fail(403, FAILURES[result.reason].title, FAILURES[result.reason].body);
     const headers = new Headers({ Location: '/', 'Cache-Control': 'no-store' });
