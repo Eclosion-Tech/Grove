@@ -47,7 +47,12 @@ export function listen(options: {
         ...(!['GET', 'HEAD'].includes(req.method ?? 'GET') ? { body: Readable.toWeb(req) as ReadableStream<Uint8Array>, duplex: 'half' } : {}),
       });
       const response = await options.route(request);
-      res.writeHead(response.status, Object.fromEntries(response.headers));
+      const outgoingHeaders: Record<string, string | string[]> = Object.fromEntries(response.headers);
+      // Set-Cookie is repeatable: the OIDC callback sets the session and clears
+      // its login attempt. Object.fromEntries alone retains only the last one.
+      const setCookies = response.headers.getSetCookie();
+      if (setCookies.length) outgoingHeaders['set-cookie'] = setCookies;
+      res.writeHead(response.status, outgoingHeaders);
       res.end(Buffer.from(await response.arrayBuffer()));
     } catch {
       res.writeHead(400, { 'Content-Type': 'application/json' });
