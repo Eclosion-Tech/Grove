@@ -1,4 +1,4 @@
-import { Accounts, Grove, GroveAdmin, InstanceKeys, SessionStore, createHandler, createPostgresDatabase, localStorage, migrate, s3Storage, type Authorize } from '@eclosion-tech/grove/server';
+import { Accounts, Grove, GroveAdmin, InstanceKeys, SessionStore, createHandler, createPostgresDatabase, migrate, type Authorize } from '@eclosion-tech/grove/server';
 import type { Scope } from '@eclosion-tech/grove';
 import { emailApi } from './email.js';
 import { staticResponse } from './browser.js';
@@ -9,6 +9,7 @@ import { OPERATOR_ACTOR } from './identity.js';
 import { OidcClient } from './oidc-client.js';
 import { parseRequiredClaims } from './oidc-claims.js';
 import { oidcAccess } from './oidc.js';
+import { hostStorage } from './storage.js';
 import { passwordAccess } from './password.js';
 
 /** Deployable Grove host. Native password sign-in by default; any OpenID Connect provider with GROVE_AUTH_MODE=oidc. See docs/identity.md. */
@@ -31,7 +32,7 @@ if (process.env.GROVE_EMAIL_API_KEY) env('GROVE_EMAIL_SIGNING_SECRET', 32);
 
 const db = createPostgresDatabase(env('DATABASE_URL'));
 await migrate(db);
-const storage = process.env.GROVE_S3_BUCKET ? s3Storage(process.env.GROVE_S3_BUCKET, { region: process.env.AWS_REGION ?? 'auto', endpoint: process.env.GROVE_S3_ENDPOINT, forcePathStyle: true }) : localStorage(process.env.GROVE_MEDIA_DIRECTORY ?? '.grove/media');
+const storage = await hostStorage(scope);
 const inScope = (requested: Scope) => requested.tenantId === scope.tenantId && requested.siteId === scope.siteId && requested.environment === scope.environment;
 const authorize: Authorize = async (actor, requested, permission) => inScope(requested) && (actor.id === OPERATOR_ACTOR ? true : grove.members.authorize(actor, requested, permission));
 const grove = new Grove(db, authorize, { storage });

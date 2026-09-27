@@ -129,3 +129,7 @@ CLI: `members list|invite|update|remove|link`.
 - Invitation links are handed over by the owner, not emailed. Adding email delivery would be an optional adapter, not a requirement.
 - No browser QA has been performed on the sign-in, invitation or change-password screens.
 
+
+## Hosted storage extension
+
+`GROVE_STORAGE_MODULE` optionally names an absolute local module path in the runtime image. Its default export is an async factory receiving `{scope}` and returning a `StorageAdapter` with `put`, `get`, and `remove`. A configured module takes precedence over S3/local settings and fails startup if it cannot load or its contract is invalid. Modules are trusted operator-installed server code and may read server environment credentials; never accept the path from an untrusted request. This lets hosted editions supply project storage without embedding a provider integration in Grove.
